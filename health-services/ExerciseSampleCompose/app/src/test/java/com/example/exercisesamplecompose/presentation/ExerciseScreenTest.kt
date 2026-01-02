@@ -69,7 +69,7 @@ class ExerciseScreenTest(
                             ExerciseServiceState()
                         ),
                         exerciseState = ExerciseServiceState()
-                    ),
+                    )
                 )
             }
         }

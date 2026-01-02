@@ -49,7 +49,6 @@ import androidx.wear.compose.material3.Text
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import com.example.exercisesamplecompose.R
 import com.example.exercisesamplecompose.data.ServiceState
-import com.example.exercisesamplecompose.presentation.ambient.ambientBlank
 import com.example.exercisesamplecompose.presentation.component.CaloriesText
 import com.example.exercisesamplecompose.presentation.component.DistanceText
 import com.example.exercisesamplecompose.presentation.component.HRText
@@ -159,46 +158,48 @@ fun ExerciseScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(
-        initialPage = 1, pageCount = { 2 })
+        initialPage = 1,
+        pageCount = { 2 }
+    )
 
-        HorizontalPagerScaffold(pagerState = pagerState) {
-            HorizontalPager(
-                state = pagerState
-            ) { page ->
-                ScreenScaffold {
-                        if (page == 0) {
-                            ExerciseControlButtons(
-                                uiState = uiState,
-                                onStartClick = onStartClick,
-                                onEndClick = onEndClick,
-                                onResumeClick = {
-                                    onResumeClick()
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage(1)
-                                    }
-                                },
-                                onPauseClick = {
-                                    onPauseClick()
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage(1)
-                                    }
-                                }
-                            )
-                        } else {
-                            ExerciseMetrics(uiState = uiState)
+    HorizontalPagerScaffold(pagerState = pagerState) {
+        HorizontalPager(
+            state = pagerState
+        ) { page ->
+            ScreenScaffold {
+                if (page == 0) {
+                    ExerciseControlButtons(
+                        uiState = uiState,
+                        onStartClick = onStartClick,
+                        onEndClick = onEndClick,
+                        onResumeClick = {
+                            onResumeClick()
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
+                        },
+                        onPauseClick = {
+                            onPauseClick()
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
                         }
-                    }
+                    )
+                } else {
+                    ExerciseMetrics(uiState = uiState)
                 }
-
-            // If we meet an exercise goal, show our exercise met dialog.
-            // This approach is for the sample, and doesn't guarantee processing of this event in all cases,
-            // such as the user exiting the app while this is in-progress. Consider alternatives to exposing
-            // state in a production app.
-            uiState.exerciseState?.exerciseGoal?.let {
-                Log.d("ExerciseGoalMet", "Showing exercise goal met dialog")
-                ExerciseGoalMet(it.isNotEmpty())
             }
         }
+
+        // If we meet an exercise goal, show our exercise met dialog.
+        // This approach is for the sample, and doesn't guarantee processing of this event in all cases,
+        // such as the user exiting the app while this is in-progress. Consider alternatives to exposing
+        // state in a production app.
+        uiState.exerciseState?.exerciseGoal?.let {
+            Log.d("ExerciseGoalMet", "Showing exercise goal met dialog")
+            ExerciseGoalMet(it.isNotEmpty())
+        }
+    }
 }
 
 @Composable

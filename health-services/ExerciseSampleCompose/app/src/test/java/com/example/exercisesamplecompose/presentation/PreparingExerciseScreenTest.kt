@@ -47,7 +47,7 @@ class PreparingExerciseScreenTest(
         }_${device.id}$suffix.png"
 
     @Composable
-   override fun TestScaffold(content: @Composable () -> Unit) {
+    override fun TestScaffold(content: @Composable () -> Unit) {
         CorrectLayout {
             AppScaffold(timeText = {}) {
                 content()
@@ -55,25 +55,24 @@ class PreparingExerciseScreenTest(
         }
     }
 
-
     @Test
     fun preparing() =
         runTest {
             AppScaffold {
-                    PreparingExerciseScreen(
-                        uiState =
-                            PreparingScreenState.Preparing(
-                                serviceState =
-                                    ServiceState.Connected(
-                                        ExerciseServiceState()
-                                    ),
-                                isTrackingInAnotherApp = false,
-                                requiredPermissions = PreparingViewModel.permissions,
-                                hasExerciseCapabilities = true
-                            ),
-                        ambientState = AmbientState.Interactive
-                    )
-                }
+                PreparingExerciseScreen(
+                    uiState =
+                    PreparingScreenState.Preparing(
+                        serviceState =
+                        ServiceState.Connected(
+                            ExerciseServiceState()
+                        ),
+                        isTrackingInAnotherApp = false,
+                        requiredPermissions = PreparingViewModel.permissions,
+                        hasExerciseCapabilities = true
+                    ),
+                    ambientState = AmbientState.Interactive
+                )
+            }
         }
 
     @Test

@@ -20,9 +20,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -47,7 +45,6 @@ import androidx.health.services.client.data.LocationAvailability
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.CurvedLayout
-import androidx.wear.compose.foundation.CurvedScope
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.CompactButton
@@ -55,9 +52,7 @@ import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.material3.TimeText
 import androidx.wear.compose.material3.curvedText
-import androidx.wear.compose.material3.timeTextCurvedText
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import com.example.exercisesamplecompose.R
 import com.example.exercisesamplecompose.data.ServiceState
@@ -144,71 +139,71 @@ fun PreparingExerciseScreen(
         first = ColumnItemType.BodyText,
         last = ColumnItemType.Button
     )
-        ScreenScaffold(
-            scrollState = columnState,
-            timeText = {},
-            contentPadding = contentPadding,
-            modifier = Modifier
-                .ambientGray(ambientState)
-        ) { contentPadding ->
-            LocationStatusText(
-                updatePrepareLocationStatus(
-                    locationAvailability = location ?: LocationAvailability.UNAVAILABLE
-                )
+    ScreenScaffold(
+        scrollState = columnState,
+        timeText = {},
+        contentPadding = contentPadding,
+        modifier = Modifier
+            .ambientGray(ambientState)
+    ) { contentPadding ->
+        LocationStatusText(
+            updatePrepareLocationStatus(
+                locationAvailability = location ?: LocationAvailability.UNAVAILABLE
             )
-            TransformingLazyColumn(
-                state = columnState,
-                contentPadding = contentPadding
-            ) {
-                item {
-                    Text(
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        text = stringResource(id = R.string.preparing_exercise),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 0.15f * LocalConfiguration.current.screenWidthDp.dp
-                            )
-                    )
-                }
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+        )
+        TransformingLazyColumn(
+            state = columnState,
+            contentPadding = contentPadding
+        ) {
+            item {
+                Text(
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    text = stringResource(id = R.string.preparing_exercise),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 0.15f * LocalConfiguration.current.screenWidthDp.dp
+                        )
+                )
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    FilledIconButton(
+                        onClick = onStart,
+                        enabled = uiState is PreparingScreenState.Preparing
                     ) {
-                        FilledIconButton(
-                            onClick = onStart,
-                            enabled = uiState is PreparingScreenState.Preparing
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = stringResource(id = R.string.start)
-                            )
-                        }
-                    }
-                }
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CompactButton(
-                            label = { Text(stringResource(id = R.string.goal)) },
-                            onClick = onGoals
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = stringResource(id = R.string.start)
                         )
                     }
                 }
             }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CompactButton(
+                        label = { Text(stringResource(id = R.string.goal)) },
+                        onClick = onGoals
+                    )
+                }
+            }
         }
     }
+}
 
 /**Return [LocationAvailability] value code as a string**/
 

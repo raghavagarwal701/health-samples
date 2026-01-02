@@ -84,13 +84,16 @@ constructor(
 
     companion object {
         val permissions = buildList {
-            add(Manifest.permission.BODY_SENSORS)
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACTIVITY_RECOGNITION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
                 add(HealthPermissions.READ_HEART_RATE)
+            } else {
+                add(Manifest.permission.BODY_SENSORS)
+            }
         }
     }
 }

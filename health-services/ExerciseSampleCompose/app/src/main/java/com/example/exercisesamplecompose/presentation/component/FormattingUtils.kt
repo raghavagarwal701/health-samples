@@ -49,8 +49,11 @@ fun formatElapsedTime(
         }
         if (includeSeconds) {
             val seconds = elapsedDuration.seconds % SECONDS_PER_MINUTE
-            if (LocalAmbientState.current.isInteractive) append("%02d".format(seconds))
-            else append("--")
+            if (LocalAmbientState.current.isInteractive) {
+                append("%02d".format(seconds))
+            } else {
+                append("--")
+            }
             withStyle(style = MaterialTheme.typography.labelSmall.toSpanStyle()) {
                 append("s")
             }
