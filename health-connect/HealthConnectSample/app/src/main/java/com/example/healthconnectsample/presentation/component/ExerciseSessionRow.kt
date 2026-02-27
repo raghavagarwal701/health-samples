@@ -50,7 +50,8 @@ fun ExerciseSessionRow(
     sourceAppName: String,
     sourceAppIcon: Drawable?,
     onDeleteClick: (String) -> Unit = {},
-    onDetailsClick: (String) -> Unit = {}
+    onDetailsClick: (String) -> Unit = {},
+    exerciseType: Int
 ) {
     Row(
         modifier = Modifier
@@ -92,7 +93,8 @@ fun ExerciseSessionRowPreview() {
             UUID.randomUUID().toString(),
             "Running",
             sourceAppName = "My Fitness app",
-            sourceAppIcon = context.getDrawable(R.drawable.ic_launcher_foreground)
+            sourceAppIcon = context.getDrawable(R.drawable.ic_launcher_foreground),
+            exerciseType = androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
         )
     }
 }

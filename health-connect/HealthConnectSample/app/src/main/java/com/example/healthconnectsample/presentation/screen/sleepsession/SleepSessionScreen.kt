@@ -92,20 +92,6 @@ fun SleepSessionScreen(
                     }
                 }
             } else {
-                item {
-                    Button(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .padding(4.dp),
-                        onClick = {
-                            onInsertClick()
-                        }
-                    ) {
-                        Text(stringResource(id = R.string.generate_sleep_data))
-                    }
-                }
-
                 items(sessionsList) { session ->
                     SleepSessionRow(session)
                 }

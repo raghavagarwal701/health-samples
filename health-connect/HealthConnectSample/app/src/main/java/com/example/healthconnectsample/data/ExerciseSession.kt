@@ -25,5 +25,6 @@ data class ExerciseSession(
     val endTime: ZonedDateTime,
     val id: String,
     val title: String?,
+    val exerciseType: Int, // Added exercise type
     val sourceAppInfo: HealthConnectAppInfo?
 )

@@ -58,7 +58,7 @@ fun ExerciseSessionInfoColumn(
     ) {
         Text(
             color = MaterialTheme.colors.primary,
-            text = "${start.toLocalTime()} - ${end.toLocalTime()}",
+            text = "${start.toLocalTime()} - ${java.time.Duration.between(start, end).toMinutes()} min",
             style = MaterialTheme.typography.caption
         )
         Text(name)
@@ -78,7 +78,7 @@ fun ExerciseSessionInfoColumn(
                 fontStyle = FontStyle.Italic
             )
         }
-        Text(uid)
+
     }
 }
 

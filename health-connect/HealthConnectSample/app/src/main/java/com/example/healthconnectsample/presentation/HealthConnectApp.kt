@@ -25,6 +25,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,6 +36,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.healthconnectsample.R
 import com.example.healthconnectsample.data.HealthConnectManager
+import com.example.healthconnectsample.data.ProfileRepository
 import com.example.healthconnectsample.presentation.navigation.Drawer
 import com.example.healthconnectsample.presentation.navigation.HealthConnectNavigation
 import com.example.healthconnectsample.presentation.navigation.Screen
@@ -45,7 +47,10 @@ const val TAG = "Health Connect sample"
 
 @SuppressLint("UnusedMaterialScaffoldPaddingParameter")
 @Composable
-fun HealthConnectApp(healthConnectManager: HealthConnectManager) {
+fun HealthConnectApp(
+    healthConnectManager: HealthConnectManager,
+    profileRepository: ProfileRepository
+) {
     HealthConnectTheme {
         val scaffoldState = rememberScaffoldState()
         val navController = rememberNavController()
@@ -61,10 +66,10 @@ fun HealthConnectApp(healthConnectManager: HealthConnectManager) {
                 TopAppBar(
                     title = {
                         val titleId = when (currentRoute) {
+                            Screen.Steps.route -> Screen.Steps.titleId
                             Screen.ExerciseSessions.route -> Screen.ExerciseSessions.titleId
                             Screen.SleepSessions.route -> Screen.SleepSessions.titleId
-                            Screen.InputReadings.route -> Screen.InputReadings.titleId
-                            Screen.DifferentialChanges.route -> Screen.DifferentialChanges.titleId
+                            Screen.Profile.route -> Screen.Profile.titleId
                             else -> R.string.app_name
                         }
                         Text(stringResource(titleId))
@@ -82,6 +87,21 @@ fun HealthConnectApp(healthConnectManager: HealthConnectManager) {
                             Icon(
                                 imageVector = Icons.Rounded.Menu,
                                 stringResource(id = R.string.menu)
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                navController.navigate(Screen.Profile.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Person,
+                                contentDescription = "Profile"
                             )
                         }
                     }
@@ -102,6 +122,7 @@ fun HealthConnectApp(healthConnectManager: HealthConnectManager) {
         ) {
             HealthConnectNavigation(
                 healthConnectManager = healthConnectManager,
+                profileRepository = profileRepository,
                 navController = navController,
                 scaffoldState = scaffoldState
             )

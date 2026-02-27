@@ -71,6 +71,12 @@ dependencies {
     // For Health Connect
     implementation "androidx.health.connect:connect-client:$health_connect_version"
 
+    // Networking - Retrofit + OkHttp for Pulse Backend API
+    implementation "com.squareup.retrofit2:retrofit:2.9.0"
+    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+    implementation "com.squareup.okhttp3:logging-interceptor:4.12.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+
     // Fix permissions issue until 1.1.0-alpha02
     implementation "androidx.core:core:1.13.1"
     implementation "androidx.core:core-ktx:1.13.1"
@@ -83,6 +89,9 @@ dependencies {
 
     // To bridge between ListenableFuture and suspend functions
     implementation "androidx.concurrent:concurrent-futures-ktx:$concurrent_futures_version"
+
+    // Markdown rendering for chat messages
+    implementation "com.github.jeziellago:compose-markdown:0.5.4"
 
     // Icons
     implementation "androidx.compose.material:material-icons-extended"

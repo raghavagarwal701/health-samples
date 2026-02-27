@@ -24,6 +24,8 @@
     <string name="sleep_sessions">Sleep sessions</string>
     <string name="sleep_session_detail">Sleep session detail</string>
     <string name="differential_changes">Changes</string>
+    <string name="chat_screen">Health Copilot</string>
+    <string name="steps_screen">Steps</string>
 
     <!-- Welcome screen -->
     <string name="welcome_message">Welcome to Health Connect!</string>
@@ -139,6 +141,24 @@
 
     <!-- Health Connect settings -->
     <string name="settings">Settings</string>
+
+    <!-- Heart Rate Screen -->
+    <string name="heart_rate_screen">Heart Rate</string>
+    <string name="heart_rate_title">Heart Rate History</string>
+    <string name="hr_avg">Avg: %1$d BPM</string>
+    <string name="hr_min">Min: %1$d</string>
+    <string name="hr_max">Max: %1$d</string>
+    <string name="no_data">No Data</string>
+    
+    <!-- Profile Screen -->
+    <string name="profile_screen">Profile</string>
+    <string name="profile_name">Name</string>
+    <string name="profile_age">Age</string>
+    <string name="profile_weight">Weight (kg)</string>
+    <string name="profile_country">Country</string>
+    <string name="profile_goal">Goal</string>
+    <string name="profile_save">Save</string>
+
     <string name="manage">Manage Health Connect</string>
     <string name="disconnect">Disconnect Health Connect</string>
 </resources>

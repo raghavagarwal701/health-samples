@@ -27,9 +27,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val healthConnectManager = (application as BaseApplication).healthConnectManager
+        val profileRepository = (application as BaseApplication).profileRepository
 
         setContent {
-            HealthConnectApp(healthConnectManager = healthConnectManager)
+            HealthConnectApp(
+                healthConnectManager = healthConnectManager,
+                profileRepository = profileRepository
+            )
         }
     }
 }

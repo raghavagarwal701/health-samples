@@ -62,3 +62,22 @@ fun randomSleepStage() = listOf(
 ).let { stages ->
     stages[Random.nextInt(stages.size)]
 }
+
+fun getExerciseName(type: Int): String {
+    return when (type) {
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "Running"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "Walking"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> "Cycling"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> "Stationary Biking"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "Swimming"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "Swimming (Open Water)"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "Yoga"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "Pilates"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "HIIT"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_GYMNASTICS -> "Gymnastics"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> "Dancing"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "Weightlifting"
+        androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_EXERCISE_CLASS -> "Workout"
+        else -> "Exercise"
+    }
+}

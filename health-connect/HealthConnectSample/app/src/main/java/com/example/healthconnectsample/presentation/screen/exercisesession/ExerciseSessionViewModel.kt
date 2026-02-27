@@ -41,6 +41,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.random.Random
 
@@ -67,7 +68,8 @@ class ExerciseSessionViewModel(private val healthConnectManager: HealthConnectMa
     var backgroundReadGranted = mutableStateOf(false)
         private set
 
-    var sessionsList: MutableState<List<ExerciseSession>> = mutableStateOf(listOf())
+    // Map of LocalDate to list of ExerciseSession, sorted by date descending
+    var sessionsList: MutableState<Map<LocalDate, List<ExerciseSession>>> = mutableStateOf(mapOf())
         private set
 
     var uiState: UiState by mutableStateOf(UiState.Uninitialized)
@@ -112,21 +114,38 @@ class ExerciseSessionViewModel(private val healthConnectManager: HealthConnectMa
     }
 
     private suspend fun readExerciseSessions() {
-        val startOfDay = ZonedDateTime.now().truncatedTo(ChronoUnit.DAYS)
-        val now = Instant.now()
-
-        sessionsList.value = healthConnectManager
-            .readExerciseSessions(startOfDay.toInstant(), now)
+        // Fetch data for the past 7 days
+        val endOfDay = ZonedDateTime.now()
+        val startOf7DaysAgo = endOfDay.minusDays(7).truncatedTo(ChronoUnit.DAYS)
+        
+        val sessions = healthConnectManager
+            .readExerciseSessions(startOf7DaysAgo.toInstant(), endOfDay.toInstant())
             .map { record ->
                 val packageName = record.metadata.dataOrigin.packageName
                 ExerciseSession(
                     startTime = dateTimeWithOffsetOrDefault(record.startTime, record.startZoneOffset),
-                    endTime = dateTimeWithOffsetOrDefault(record.startTime, record.startZoneOffset),
+                    endTime = dateTimeWithOffsetOrDefault(record.endTime, record.endZoneOffset),
                     id = record.metadata.id,
                     sourceAppInfo = healthConnectCompatibleApps[packageName],
-                    title = record.title
+                    title = record.title,
+                    exerciseType = record.exerciseType
                 )
             }
+            
+        // Group by LocalDate and sort descending
+        sessionsList.value = sessions
+            .groupBy { it.startTime.toLocalDate() }
+            .toSortedMap(compareByDescending { it })
+            
+        // Ensure strictly last 7 days keys exist even if empty, if desired. 
+        // For now, only showing days with data or all days.
+        // Let's populate the map with empty lists for days with no data within the range to keep UI consistent
+        val populateMap = mutableMapOf<LocalDate, List<ExerciseSession>>()
+        for(i in 0..6) {
+            val date = LocalDate.now().minusDays(i.toLong())
+            populateMap[date] = sessionsList.value[date] ?: emptyList()
+        }
+        sessionsList.value = populateMap.toSortedMap(compareByDescending { it })
     }
 
     /**

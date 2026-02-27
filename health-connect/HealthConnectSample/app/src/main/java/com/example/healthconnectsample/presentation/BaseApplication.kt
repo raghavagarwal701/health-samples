@@ -17,9 +17,14 @@ package com.example.healthconnectsample.presentation
 
 import android.app.Application
 import com.example.healthconnectsample.data.HealthConnectManager
+import com.example.healthconnectsample.data.ProfileRepository
 
 class BaseApplication : Application() {
     val healthConnectManager by lazy {
         HealthConnectManager(this)
+    }
+
+    val profileRepository by lazy {
+        ProfileRepository(this)
     }
 }

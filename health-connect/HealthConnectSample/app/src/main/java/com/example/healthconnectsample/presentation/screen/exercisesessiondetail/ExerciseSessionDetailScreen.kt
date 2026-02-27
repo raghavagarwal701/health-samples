@@ -106,7 +106,6 @@ fun ExerciseSessionDetailScreen(
                         style = MaterialTheme.typography.h5,
                         color = MaterialTheme.colors.primary,
                     )
-                    Text("id: " + sessionMetrics.uid)
                 }
                 sessionDetailsItem(labelId = R.string.total_active_duration) {
                         val activeDuration = sessionMetrics.totalActiveTime ?: Duration.ZERO

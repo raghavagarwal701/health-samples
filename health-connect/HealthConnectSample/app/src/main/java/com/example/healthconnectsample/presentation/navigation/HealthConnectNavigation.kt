@@ -28,20 +28,19 @@ import androidx.navigation.navDeepLink
 import com.example.healthconnectsample.data.HealthConnectManager
 import com.example.healthconnectsample.presentation.screen.SettingsScreen
 import com.example.healthconnectsample.presentation.screen.WelcomeScreen
-import com.example.healthconnectsample.presentation.screen.changes.DifferentialChangesScreen
-import com.example.healthconnectsample.presentation.screen.changes.DifferentialChangesViewModel
-import com.example.healthconnectsample.presentation.screen.changes.DifferentialChangesViewModelFactory
+
 import com.example.healthconnectsample.presentation.screen.exercisesession.ExerciseSessionScreen
 import com.example.healthconnectsample.presentation.screen.exercisesession.ExerciseSessionViewModel
 import com.example.healthconnectsample.presentation.screen.exercisesession.ExerciseSessionViewModelFactory
 import com.example.healthconnectsample.presentation.screen.exercisesessiondetail.ExerciseSessionDetailScreen
 import com.example.healthconnectsample.presentation.screen.exercisesessiondetail.ExerciseSessionDetailViewModel
 import com.example.healthconnectsample.presentation.screen.exercisesessiondetail.ExerciseSessionDetailViewModelFactory
-import com.example.healthconnectsample.presentation.screen.inputreadings.InputReadingsScreen
-import com.example.healthconnectsample.presentation.screen.inputreadings.InputReadingsViewModel
-import com.example.healthconnectsample.presentation.screen.inputreadings.InputReadingsViewModelFactory
+
 import com.example.healthconnectsample.presentation.screen.privacypolicy.PrivacyPolicyScreen
 import com.example.healthconnectsample.presentation.screen.recordlist.RecordType
+import com.example.healthconnectsample.presentation.screen.steps.StepsScreen
+import com.example.healthconnectsample.presentation.screen.steps.StepsViewModel
+import com.example.healthconnectsample.presentation.screen.steps.StepsViewModelFactory
 import com.example.healthconnectsample.presentation.screen.recordlist.RecordListScreen
 import com.example.healthconnectsample.presentation.screen.recordlist.RecordListScreenViewModel
 import com.example.healthconnectsample.presentation.screen.recordlist.RecordListViewModelFactory
@@ -49,8 +48,18 @@ import com.example.healthconnectsample.presentation.screen.recordlist.SeriesReco
 import com.example.healthconnectsample.presentation.screen.sleepsession.SleepSessionScreen
 import com.example.healthconnectsample.presentation.screen.sleepsession.SleepSessionViewModel
 import com.example.healthconnectsample.presentation.screen.sleepsession.SleepSessionViewModelFactory
+import com.example.healthconnectsample.presentation.screen.chat.ChatScreen
+import com.example.healthconnectsample.presentation.screen.chat.ChatViewModel
+import com.example.healthconnectsample.presentation.screen.heartrate.HeartRateScreen
+import com.example.healthconnectsample.presentation.screen.heartrate.HeartRateViewModel
+import com.example.healthconnectsample.presentation.screen.heartrate.HeartRateViewModelFactory
 import com.example.healthconnectsample.showExceptionSnackbar
 import kotlinx.coroutines.launch
+
+import com.example.healthconnectsample.data.ProfileRepository
+import com.example.healthconnectsample.presentation.screen.profile.ProfileScreen
+import com.example.healthconnectsample.presentation.screen.profile.ProfileViewModel
+import com.example.healthconnectsample.presentation.screen.profile.ProfileViewModelFactory
 
 /**
  * Provides the navigation in the app.
@@ -59,10 +68,11 @@ import kotlinx.coroutines.launch
 fun HealthConnectNavigation(
     navController: NavHostController,
     healthConnectManager: HealthConnectManager,
+    profileRepository: ProfileRepository,
     scaffoldState: ScaffoldState
 ) {
     val scope = rememberCoroutineScope()
-    NavHost(navController = navController, startDestination = Screen.WelcomeScreen.route) {
+    NavHost(navController = navController, startDestination = Screen.ChatScreen.route) {
         val availability by healthConnectManager.availability
         composable(Screen.WelcomeScreen.route) {
             WelcomeScreen(
@@ -71,6 +81,14 @@ fun HealthConnectNavigation(
                     healthConnectManager.checkAvailability()
                 }
             )
+        }
+        composable(Screen.Profile.route) {
+            val viewModel: ProfileViewModel = viewModel(
+                factory = ProfileViewModelFactory(
+                    repository = profileRepository
+                )
+            )
+            ProfileScreen(viewModel = viewModel)
         }
         composable(
             route = Screen.PrivacyPolicy.route,
@@ -224,33 +242,27 @@ fun HealthConnectNavigation(
                     permissionsLauncher.launch(values)}
             )
         }
-        composable(Screen.InputReadings.route) {
-            val viewModel: InputReadingsViewModel = viewModel(
-                factory = InputReadingsViewModelFactory(
+
+        composable(Screen.Steps.route) {
+            val viewModel: StepsViewModel = viewModel(
+                factory = StepsViewModelFactory(
                     healthConnectManager = healthConnectManager
                 )
             )
             val permissionsGranted by viewModel.permissionsGranted
-            val readingsList by viewModel.readingsList
+            val todayData by viewModel.todayData
+            val weeklyData by viewModel.weeklyData
             val permissions = viewModel.permissions
-            val weeklyAvg by viewModel.weeklyAvg
             val onPermissionsResult = {viewModel.initialLoad()}
             val permissionsLauncher =
                 rememberLauncherForActivityResult(viewModel.permissionsLauncher) {
-                onPermissionsResult()}
-            InputReadingsScreen(
+                    onPermissionsResult()}
+            StepsScreen(
                 permissionsGranted = permissionsGranted,
                 permissions = permissions,
-
+                todayData = todayData,
+                weeklyData = weeklyData,
                 uiState = viewModel.uiState,
-                onInsertClick = { weightInput ->
-                    viewModel.inputReadings(weightInput)
-                },
-                weeklyAvg = weeklyAvg,
-                onDeleteClick = { uid ->
-                    viewModel.deleteWeightInput(uid)
-                },
-                readingsList = readingsList,
                 onError = { exception ->
                     showExceptionSnackbar(scaffoldState, scope, exception)
                 },
@@ -261,41 +273,42 @@ fun HealthConnectNavigation(
                     permissionsLauncher.launch(values)}
             )
         }
-        composable(Screen.DifferentialChanges.route) {
-            val viewModel: DifferentialChangesViewModel = viewModel(
-                factory = DifferentialChangesViewModelFactory(
+        composable(Screen.ChatScreen.route) {
+            val viewModel: ChatViewModel = viewModel(
+                factory = ChatViewModel.Factory(
+                    healthConnectManager = healthConnectManager,
+                    profileRepository = profileRepository
+                )
+            )
+            ChatScreen(viewModel = viewModel)
+        }
+        composable(Screen.HeartRate.route) {
+            val viewModel: HeartRateViewModel = viewModel(
+                factory = HeartRateViewModelFactory(
                     healthConnectManager = healthConnectManager
                 )
             )
-            val changesToken by viewModel.changesToken
             val permissionsGranted by viewModel.permissionsGranted
+            val dailyHeartRates by viewModel.dailyHeartRates
             val permissions = viewModel.permissions
             val onPermissionsResult = {viewModel.initialLoad()}
             val permissionsLauncher =
                 rememberLauncherForActivityResult(viewModel.permissionsLauncher) {
-                onPermissionsResult()}
-            DifferentialChangesScreen(
+                    onPermissionsResult()}
+            HeartRateScreen(
                 permissionsGranted = permissionsGranted,
                 permissions = permissions,
-                changesEnabled = changesToken != null,
-                onChangesEnable = { enabled ->
-                    viewModel.enableOrDisableChanges(enabled)
-                },
-                changes = viewModel.changes,
-                changesToken = changesToken,
-                onGetChanges = {
-                    viewModel.getChanges()
-                },
+                dailyHeartRates = dailyHeartRates,
                 uiState = viewModel.uiState,
                 onError = { exception ->
                     showExceptionSnackbar(scaffoldState, scope, exception)
                 },
                 onPermissionsResult = {
                     viewModel.initialLoad()
-                }
-            ) { values ->
-                permissionsLauncher.launch(values)
-            }
+                },
+                onPermissionsLaunch = { values ->
+                    permissionsLauncher.launch(values)}
+            )
         }
     }
 }

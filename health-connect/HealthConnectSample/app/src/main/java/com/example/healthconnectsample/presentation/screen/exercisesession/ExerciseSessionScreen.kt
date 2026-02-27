@@ -35,17 +35,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.permission.HealthPermission.Companion.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
-import androidx.health.connect.client.records.ExerciseSessionRecord
 import com.example.healthconnectsample.R
 import com.example.healthconnectsample.data.ExerciseSession
 import com.example.healthconnectsample.data.HealthConnectAppInfo
-import com.example.healthconnectsample.presentation.component.ExerciseSessionRow
+import com.example.healthconnectsample.presentation.component.DailyExerciseSessionRow
 import com.example.healthconnectsample.presentation.theme.HealthConnectTheme
+import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
 
 /**
- * Shows a list of [ExerciseSessionRecord]s from today.
+ * Shows a list of [ExerciseSessionRecord]s from the past 7 days.
  */
 @Composable
 fun ExerciseSessionScreen(
@@ -53,7 +53,7 @@ fun ExerciseSessionScreen(
     permissionsGranted: Boolean,
     backgroundReadAvailable: Boolean,
     backgroundReadGranted: Boolean,
-    sessionsList: List<ExerciseSession>,
+    sessionsList: Map<LocalDate, List<ExerciseSession>>,
     uiState: ExerciseSessionViewModel.UiState,
     onInsertClick: () -> Unit = {},
     onDetailsClick: (String) -> Unit = {},
@@ -100,19 +100,7 @@ fun ExerciseSessionScreen(
                     }
                 }
             } else {
-                item {
-                    Button(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .padding(4.dp),
-                        onClick = {
-                            onInsertClick()
-                        }
-                    ) {
-                        Text(stringResource(id = R.string.insert_exercise_session))
-                    }
-                }
+
                 if (!backgroundReadGranted) {
                     item {
                         Button(
@@ -134,21 +122,13 @@ fun ExerciseSessionScreen(
                     }
                 }
 
-                items(sessionsList) { session ->
-                    val appInfo = session.sourceAppInfo
-                    ExerciseSessionRow(
-                        start = session.startTime,
-                        end = session.endTime,
-                        uid = session.id,
-                        name = session.title ?: stringResource(R.string.no_title),
-                        sourceAppName = appInfo?.appLabel ?: stringResource(R.string.unknown_app),
-                        sourceAppIcon = appInfo?.icon,
-                        onDeleteClick = { uid ->
-                            onDeleteClick(uid)
-                        },
-                        onDetailsClick = { uid ->
-                            onDetailsClick(uid)
-                        }
+                items(sessionsList.keys.toList()) { date ->
+                    val sessions = sessionsList[date] ?: emptyList()
+                    DailyExerciseSessionRow(
+                        date = date,
+                        sessions = sessions,
+                        onDeleteClick = onDeleteClick,
+                        onDetailsClick = onDetailsClick
                     )
                 }
             }
@@ -172,27 +152,33 @@ fun ExerciseSessionScreenPreview() {
             icon = context.getDrawable(R.drawable.ic_launcher_foreground)!!
         )
 
+        val sessions = listOf(
+            ExerciseSession(
+                title = "Running",
+                startTime = runningStartTime,
+                endTime = runningEndTime,
+                id = UUID.randomUUID().toString(),
+                sourceAppInfo = appInfo,
+                exerciseType = androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
+            ),
+            ExerciseSession(
+                title = "Walking",
+                startTime = walkingStartTime,
+                endTime = walkingEndTime,
+                id = UUID.randomUUID().toString(),
+                sourceAppInfo = appInfo,
+                exerciseType = androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING
+            )
+        )
+        
+        val sessionsMap = sessions.groupBy { it.startTime.toLocalDate() }
+
         ExerciseSessionScreen(
             permissions = setOf(),
             permissionsGranted = true,
             backgroundReadAvailable = false,
             backgroundReadGranted = false,
-            sessionsList = listOf(
-                ExerciseSession(
-                    title = "Running",
-                    startTime = runningStartTime,
-                    endTime = runningEndTime,
-                    id = UUID.randomUUID().toString(),
-                    sourceAppInfo = appInfo
-                ),
-                ExerciseSession(
-                    title = "Walking",
-                    startTime = walkingStartTime,
-                    endTime = walkingEndTime,
-                    id = UUID.randomUUID().toString(),
-                    sourceAppInfo = appInfo
-                )
-            ),
+            sessionsList = sessionsMap,
             uiState = ExerciseSessionViewModel.UiState.Done
         )
     }

@@ -30,7 +30,9 @@ import androidx.health.connect.client.changes.Change
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.SpeedRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -46,10 +48,12 @@ import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
 import androidx.health.connect.client.units.Mass
 import com.example.healthconnectsample.R
+import com.example.healthconnectsample.data.api.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.io.IOException
 import java.io.InvalidObjectException
+import java.time.Duration
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
@@ -498,6 +502,278 @@ class HealthConnectManager(private val context: Context) {
             .getFeatureStatus(feature) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
     }
 
+    // ===== Backend Integration Functions =====
+
+    /**
+     * Reads heart rate data for a given time range.
+     * Returns a list of HR samples with timestamps.
+     */
+    suspend fun readHeartRateData(start: Instant, end: Instant): List<HeartRateRecord> {
+        val request = ReadRecordsRequest(
+            recordType = HeartRateRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        return healthConnectClient.readRecords(request).records
+    }
+
+    /**
+     * Reads HRV (RMSSD) data for a given time range.
+     */
+    suspend fun readHrvData(start: Instant, end: Instant): List<HeartRateVariabilityRmssdRecord> {
+        val request = ReadRecordsRequest(
+            recordType = HeartRateVariabilityRmssdRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        return healthConnectClient.readRecords(request).records
+    }
+
+    /**
+     * Reads resting heart rate data for a given time range.
+     */
+    suspend fun readRestingHeartRate(start: Instant, end: Instant): List<RestingHeartRateRecord> {
+        val request = ReadRecordsRequest(
+            recordType = RestingHeartRateRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        return healthConnectClient.readRecords(request).records
+    }
+
+    /**
+     * Reads aggregated steps data (total steps for a time range).
+     */
+    suspend fun readStepsAggregate(start: Instant, end: Instant): Long? {
+        val request = AggregateRequest(
+            metrics = setOf(StepsRecord.COUNT_TOTAL),
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        val response = healthConnectClient.aggregate(request)
+        return response[StepsRecord.COUNT_TOTAL]
+    }
+
+    /**
+     * Reads aggregated distance (total distance for a time range).
+     */
+    suspend fun readDistanceAggregate(start: Instant, end: Instant): Length? {
+        val request = AggregateRequest(
+            metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        val response = healthConnectClient.aggregate(request)
+        return response[DistanceRecord.DISTANCE_TOTAL]
+    }
+
+    /**
+     * Reads aggregated calories (total calories for a time range).
+     */
+    suspend fun readCaloriesAggregate(start: Instant, end: Instant): Energy? {
+        val request = AggregateRequest(
+            metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
+            timeRangeFilter = TimeRangeFilter.between(start, end)
+        )
+        val response = healthConnectClient.aggregate(request)
+        return response[TotalCaloriesBurnedRecord.ENERGY_TOTAL]
+    }
+
+    /**
+     * Master function: Collects and aggregates 7 days of health data into a
+     * HealthDataPayload suitable for the Pulse Backend API.
+     */
+    /**
+     * Master function: Collects and aggregates 7 days of health data into a
+     * HealthDataPayload suitable for the Pulse Backend API.
+     */
+    suspend fun collectHealthDataForBackend(
+        userProfile: UserProfilePayload? = null
+    ): HealthDataPayload {
+        val now = Instant.now()
+        val sevenDaysAgo = now.minus(7, ChronoUnit.DAYS)
+        val oneDayAgo = now.minus(1, ChronoUnit.DAYS)
+
+        // --- Activity Summary ---
+        val activitySummary = try {
+            val totalSteps = readStepsAggregate(sevenDaysAgo, now)
+            val totalDistance = readDistanceAggregate(sevenDaysAgo, now)
+            val totalCalories = readCaloriesAggregate(sevenDaysAgo, now)
+
+            val dailyAvgSteps = totalSteps?.let { it / 7 }
+            val dailyAvgDistanceKm = totalDistance?.inKilometers?.let { it / 7 }
+            val dailyAvgCalories = totalCalories?.inKilocalories?.let { it / 7 }
+
+            // Calculate daily breakdown for the past 7 days
+            val dailyActivity = (0..6).map { i ->
+                val dayStart = ZonedDateTime.now().minusDays(i.toLong()).truncatedTo(ChronoUnit.DAYS).toInstant()
+                val dayEnd = dayStart.plus(1, ChronoUnit.DAYS)
+                
+                val daySteps = readStepsAggregate(dayStart, dayEnd) ?: 0L
+                val dayDistance = readDistanceAggregate(dayStart, dayEnd)?.inKilometers ?: 0.0
+                val dayCalories = readCaloriesAggregate(dayStart, dayEnd)?.inKilocalories ?: 0.0
+
+                mapOf(
+                    "date" to dayStart.toString(),
+                    "steps" to daySteps,
+                    "distance_km" to dayDistance,
+                    "calories" to dayCalories
+                )
+            }
+
+            ActivitySummaryPayload(
+                dailyAverages = mapOf(
+                    "steps" to (dailyAvgSteps ?: 0L),
+                    "distance_km" to (dailyAvgDistanceKm ?: 0.0),
+                    "calories_burned" to (dailyAvgCalories ?: 0.0)
+                ),
+                pastSevenDaysActivity = dailyActivity
+            )
+        } catch (e: Exception) {
+            null
+        }
+
+        // --- Sleep Summary ---
+        val sleepSummary = try {
+            val sleepSessions = readSleepSessions() // This gets last 7 days
+            val sessionsData = sleepSessions.map { session ->
+                val deepSleepDuration = session.stages.filter { it.stage == SleepSessionRecord.STAGE_TYPE_DEEP }.sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+                val lightSleepDuration = session.stages.filter { it.stage == SleepSessionRecord.STAGE_TYPE_LIGHT }.sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+                val awakeDuration = session.stages.filter { it.stage == SleepSessionRecord.STAGE_TYPE_AWAKE }.sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+                val remSleepDuration = session.stages.filter { it.stage == SleepSessionRecord.STAGE_TYPE_REM }.sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
+
+                mapOf<String, Any>(
+                    "start_time" to session.startTime.toString(),
+                    "end_time" to session.endTime.toString(),
+                    "duration_minutes" to (session.duration?.toMinutes() ?: 0L),
+                    "deep_sleep_minutes" to deepSleepDuration,
+                    "light_sleep_minutes" to lightSleepDuration,
+                    "awake_minutes" to awakeDuration,
+                    "rem_sleep_minutes" to remSleepDuration
+                )
+            }
+
+            val avgDurationMinutes = if (sleepSessions.isNotEmpty()) {
+                sleepSessions.mapNotNull { it.duration?.toMinutes() }.average()
+            } else 0.0
+
+            SleepSummaryPayload(
+                sleepSessions = sessionsData,
+                sleepQuality = mapOf(
+                    "average_duration_minutes" to avgDurationMinutes,
+                    "total_sessions" to sleepSessions.size
+                )
+            )
+        } catch (e: Exception) {
+            null
+        }
+
+        // --- Heart Rate Summary ---
+        val heartRateSummary = try {
+            val hrRecords = readHeartRateData(sevenDaysAgo, now)
+            val allSamples = hrRecords.flatMap { it.samples }
+            val avgHr = if (allSamples.isNotEmpty()) {
+                allSamples.map { it.beatsPerMinute }.average()
+            } else null
+            val minHr = allSamples.minOfOrNull { it.beatsPerMinute }?.toDouble()
+            val maxHr = allSamples.maxOfOrNull { it.beatsPerMinute }?.toDouble()
+
+            HeartRateSummaryPayload(
+                minHr = minHr,
+                maxHr = maxHr,
+                averageHr = avgHr
+            )
+        } catch (e: Exception) {
+            null
+        }
+
+        // --- HRV Summary --- (Unchanged for now, but keeping for completeness if needed)
+        val hrvSummary = try {
+            val hrvRecords = readHrvData(sevenDaysAgo, now)
+            val avgHrv = if (hrvRecords.isNotEmpty()) {
+                hrvRecords.map { it.heartRateVariabilityMillis }.average()
+            } else null
+
+            HrvSummaryPayload(
+                averageHrv = avgHrv,
+                hrvTrend = if (hrvRecords.size >= 2) {
+                    val firstHalf = hrvRecords.take(hrvRecords.size / 2).map { it.heartRateVariabilityMillis }.average()
+                    val secondHalf = hrvRecords.drop(hrvRecords.size / 2).map { it.heartRateVariabilityMillis }.average()
+                    when {
+                        secondHalf > firstHalf * 1.05 -> "improving"
+                        secondHalf < firstHalf * 0.95 -> "declining"
+                        else -> "stable"
+                    }
+                } else "insufficient_data",
+                measurements = hrvRecords.takeLast(10).map { record ->
+                    mapOf(
+                        "hrv_ms" to record.heartRateVariabilityMillis,
+                        "time" to record.time.toString()
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            null
+        }
+
+        // --- Exercise Summary ---
+        val exerciseSummary = try {
+            val exerciseSessions = readExerciseSessions(sevenDaysAgo, now)
+            val sessionsData = exerciseSessions.map { session ->
+                val sessionData = try {
+                    readAssociatedSessionData(session.metadata.id)
+                } catch (e: Exception) { null }
+                
+                val hrMin = sessionData?.minHeartRate ?: 0L
+                val hrMax = sessionData?.maxHeartRate ?: 0L
+                val hrAvg = sessionData?.avgHeartRate ?: 0L
+
+                val hrStats = mapOf(
+                     "min" to hrMin,
+                     "max" to hrMax,
+                     "avg" to hrAvg
+                )
+
+                mapOf<String, Any>(
+                    "name" to (session.title ?: "Unnamed"),
+                    "exercise_type" to getExerciseName(session.exerciseType),
+                    "start_time" to session.startTime.toString(),
+                    "duration_minutes" to (Duration.between(session.startTime, session.endTime).toMinutes()),
+                    "distance_meters" to (sessionData?.totalDistance?.inMeters ?: 0.0),
+                    "calories" to (sessionData?.totalEnergyBurned?.inKilocalories ?: 0.0),
+                    "hr_stats" to hrStats
+                )
+            }
+
+            val exerciseTypes = exerciseSessions.map {
+                getExerciseName(it.exerciseType)
+            }.distinct()
+
+            ExerciseSummaryPayload(
+                sessions = sessionsData,
+                totalSessions = exerciseSessions.size,
+                exerciseTypes = exerciseTypes
+            )
+        } catch (e: Exception) {
+            null
+        }
+
+        // --- Weight (for user_data) ---
+        val latestWeight = try {
+            val weights = readWeightInputs(sevenDaysAgo, now)
+            weights.lastOrNull()?.weight?.inKilograms
+        } catch (e: Exception) { null }
+
+        // Build final user profile, merging weight if available
+        val finalUserProfile = userProfile?.copy(
+            weightKg = latestWeight ?: userProfile.weightKg
+        ) ?: UserProfilePayload(weightKg = latestWeight)
+
+        return HealthDataPayload(
+            activitySummary = activitySummary,
+            sleepSummary = sleepSummary,
+            heartRateSummary = heartRateSummary,
+            hrvSummary = hrvSummary,
+            exerciseSummary = exerciseSummary,
+            userData = finalUserProfile
+        )
+    }
+
     // Represents the two types of messages that can be sent in a Changes flow.
     sealed class ChangesMessage {
         data class NoMoreChanges(val nextChangesToken: String) : ChangesMessage()
@@ -505,3 +781,4 @@ class HealthConnectManager(private val context: Context) {
         data class ChangeList(val changes: List<Change>) : ChangesMessage()
     }
 }
+
