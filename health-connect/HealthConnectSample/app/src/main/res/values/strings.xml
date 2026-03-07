@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <resources>
-    <string name="app_name">Health Connect Sample</string>
+    <string name="app_name">Pulse</string>
     <string name="menu">menu</string>
 
     <!-- Screen titles -->
@@ -24,6 +24,7 @@
     <string name="sleep_sessions">Sleep sessions</string>
     <string name="sleep_session_detail">Sleep session detail</string>
     <string name="differential_changes">Changes</string>
+    <string name="home_screen">Home</string>
     <string name="chat_screen">Health Copilot</string>
     <string name="steps_screen">Steps</string>
 
@@ -49,7 +50,8 @@
     <string name="health_connect_package">com.google.android.apps.healthdata</string>
     <string name="onboarding_url">healthconnect://onboarding</string>
     <string name="not_installed_description">
-        Health Connect is supported on this device, but is either not installed, or requires an update.
+        Health Connect is supported on this device, but is either not installed, or requires an
+        update.
     </string>
     <string name="not_installed_link_text">
         To use this sample, please install or update the Health Connect package via Google Play.
@@ -115,8 +117,10 @@
     <string name="valid_weight_error_message"> Weight must be between 0 and 1000</string>
 
     <!-- Differential changes screen -->
-    <string name="differential_changes_title_text">Enabling differential change tracking obtains a token that can be used later for obtaining any subsequent changes</string>
-    <string name="differential_changes_continuation_text">Click on the button below to get any new changes that have taken place in Health Connnect since the token was obtained.</string>
+    <string name="differential_changes_title_text">Enabling differential change tracking obtains a
+        token that can be used later for obtaining any subsequent changes</string>
+    <string name="differential_changes_continuation_text">Click on the button below to get any new
+        changes that have taken place in Health Connnect since the token was obtained.</string>
     <string name="differential_changes_switch_text">Track changes</string>
     <string name="differential_changes_button_text">"Get new changes"</string>
     <string name="differential_changes_empty">No changes found</string>
@@ -149,9 +153,13 @@
     <string name="hr_min">Min: %1$d</string>
     <string name="hr_max">Max: %1$d</string>
     <string name="no_data">No Data</string>
-    
+
     <!-- Profile Screen -->
     <string name="profile_screen">Profile</string>
+
+    <!-- Product Scanner Screen -->
+    <string name="product_scanner_screen">Scan Product</string>
+    <string name="meals_screen">Meals</string>
     <string name="profile_name">Name</string>
     <string name="profile_age">Age</string>
     <string name="profile_weight">Weight (kg)</string>

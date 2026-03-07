@@ -18,8 +18,12 @@ package com.example.healthconnectsample.presentation.navigation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.ScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -61,6 +65,15 @@ import com.example.healthconnectsample.presentation.screen.profile.ProfileScreen
 import com.example.healthconnectsample.presentation.screen.profile.ProfileViewModel
 import com.example.healthconnectsample.presentation.screen.profile.ProfileViewModelFactory
 
+import com.example.healthconnectsample.presentation.screen.productscanner.ProductScannerScreen
+import com.example.healthconnectsample.presentation.screen.productscanner.ProductScannerViewModel
+import android.app.Application
+import androidx.compose.ui.platform.LocalContext
+import com.example.healthconnectsample.presentation.screen.home.HomeScreen
+import com.example.healthconnectsample.presentation.screen.home.HomeViewModel
+import com.example.healthconnectsample.presentation.screen.meals.MealsScreen
+import com.example.healthconnectsample.presentation.screen.meals.MealsViewModel
+
 /**
  * Provides the navigation in the app.
  */
@@ -72,8 +85,50 @@ fun HealthConnectNavigation(
     scaffoldState: ScaffoldState
 ) {
     val scope = rememberCoroutineScope()
-    NavHost(navController = navController, startDestination = Screen.ChatScreen.route) {
+    NavHost(navController = navController, startDestination = Screen.HomeScreen.route) {
         val availability by healthConnectManager.availability
+        composable(Screen.HomeScreen.route) {
+            val context = LocalContext.current
+            val viewModel: HomeViewModel = viewModel(
+                factory = HomeViewModel.Factory(
+                    application = context.applicationContext as Application,
+                    healthConnectManager = healthConnectManager
+                )
+            )
+            val permissionsGranted by viewModel.permissionsGranted
+            val homeData by viewModel.homeData
+            val permissions = viewModel.permissions
+            val onPermissionsResult = { viewModel.initialLoad() }
+
+            // Reload whenever the home screen comes back into view (e.g. after adding a meal)
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        viewModel.initialLoad()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            val permissionsLauncher =
+                rememberLauncherForActivityResult(viewModel.permissionsLauncher) {
+                    onPermissionsResult()
+                }
+            HomeScreen(
+                permissionsGranted = permissionsGranted,
+                permissions = permissions,
+                homeData = homeData,
+                uiState = viewModel.uiState.value,
+                onError = { exception ->
+                    showExceptionSnackbar(scaffoldState, scope, exception)
+                },
+                onPermissionsResult = { viewModel.initialLoad() },
+                onPermissionsLaunch = { values -> permissionsLauncher.launch(values) },
+                onNavigateToMeals = { navController.navigate(Screen.MealsScreen.route) },
+                onNavigateToSteps = { navController.navigate(Screen.Steps.route) }
+            )
+        }
         composable(Screen.WelcomeScreen.route) {
             WelcomeScreen(
                 healthConnectAvailability = availability,
@@ -309,6 +364,19 @@ fun HealthConnectNavigation(
                 onPermissionsLaunch = { values ->
                     permissionsLauncher.launch(values)}
             )
+        }
+        composable(Screen.ProductScanner.route) {
+            val viewModel: ProductScannerViewModel = viewModel(
+                factory = ProductScannerViewModel.Factory()
+            )
+            ProductScannerScreen(viewModel = viewModel)
+        }
+        composable(Screen.MealsScreen.route) {
+            val context = LocalContext.current
+            val viewModel: MealsViewModel = viewModel(
+                factory = MealsViewModel.Factory(context.applicationContext as Application)
+            )
+            MealsScreen(viewModel = viewModel)
         }
     }
 }

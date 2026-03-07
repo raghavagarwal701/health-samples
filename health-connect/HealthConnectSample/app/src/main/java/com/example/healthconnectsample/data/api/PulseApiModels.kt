@@ -92,3 +92,57 @@ data class HealthCheckResponse(
     val service: String,
     val version: String
 )
+
+// ===== Product Scanner Models =====
+
+data class ProductNutrimentsResponse(
+    @SerializedName("energy_kcal_100g") val energyKcal100g: Double? = null,
+    @SerializedName("fat_100g") val fat100g: Double? = null,
+    @SerializedName("carbohydrates_100g") val carbohydrates100g: Double? = null,
+    @SerializedName("sugars_100g") val sugars100g: Double? = null,
+    @SerializedName("proteins_100g") val proteins100g: Double? = null,
+    @SerializedName("fiber_100g") val fiber100g: Double? = null,
+    @SerializedName("salt_100g") val salt100g: Double? = null,
+    // Per-package scaled values
+    @SerializedName("energy_kcal_pkg") val energyKcalPkg: Double? = null,
+    @SerializedName("fat_pkg") val fatPkg: Double? = null,
+    @SerializedName("carbohydrates_pkg") val carbohydratesPkg: Double? = null,
+    @SerializedName("sugars_pkg") val sugarsPkg: Double? = null,
+    @SerializedName("proteins_pkg") val proteinsPkg: Double? = null,
+    @SerializedName("fiber_pkg") val fiberPkg: Double? = null,
+    @SerializedName("salt_pkg") val saltPkg: Double? = null,
+)
+
+data class ProductInfoResponse(
+    val barcode: String,
+    @SerializedName("product_name") val productName: String? = null,
+    val brands: String? = null,
+    val categories: String? = null,
+    @SerializedName("nutriscore_grade") val nutriscoreGrade: String? = null,
+    val nutriments: ProductNutrimentsResponse? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    @SerializedName("ingredients_text") val ingredientsText: String? = null,
+    @SerializedName("product_quantity") val productQuantity: Double? = null,
+    @SerializedName("product_quantity_unit") val productQuantityUnit: String? = null,
+    @SerializedName("serving_size") val servingSize: String? = null,
+    @SerializedName("serving_quantity") val servingQuantity: Double? = null,
+)
+
+data class ProductResponse(
+    val status: String,
+    val product: ProductInfoResponse? = null,
+    val error: String? = null,
+)
+
+// ===== Meal Analysis Models =====
+// Reuses ProductInfoResponse so the result card UI works for both barcode and meal flows.
+
+data class MealAnalysisResponse(
+    val status: String,                       // "analyzed" | "error"
+    val product: ProductInfoResponse? = null, // dish name / portion / nutriments
+    val error: String? = null,
+)
+
+data class MealTextRequest(
+    val description: String,                  // plain-text description of what the user ate
+)
