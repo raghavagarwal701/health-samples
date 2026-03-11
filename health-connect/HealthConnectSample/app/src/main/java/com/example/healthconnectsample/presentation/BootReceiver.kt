@@ -15,23 +15,20 @@
  */
 package com.example.healthconnectsample.presentation
 
-import android.app.Application
-import com.example.healthconnectsample.data.HealthConnectManager
-import com.example.healthconnectsample.data.ProfileRepository
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 
-class BaseApplication : Application() {
-
-    val healthConnectManager by lazy {
-        HealthConnectManager(this)
-    }
-
-    val profileRepository by lazy {
-        ProfileRepository(this)
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        // Schedule daily meal reminder notifications (08:00, 13:00, 16:00, 19:00)
-        MealNotificationScheduler.schedule(this)
+/**
+ * Reschedules meal reminder alarms after the device reboots, because
+ * AlarmManager alarms are cleared on reboot.
+ */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent.action == "android.intent.action.QUICKBOOT_POWERON"
+        ) {
+            MealNotificationScheduler.schedule(context)
+        }
     }
 }

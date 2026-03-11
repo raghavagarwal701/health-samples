@@ -16,32 +16,33 @@
 package com.example.healthconnectsample.presentation
 
 import android.annotation.SuppressLint
+import androidx.compose.material.BottomNavigation
+import androidx.compose.material.BottomNavigationItem
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Snackbar
 import androidx.compose.material.SnackbarHost
 import androidx.compose.material.Text
-import androidx.compose.material.TopAppBar
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.res.stringResource
-import androidx.health.connect.client.HealthConnectClient.Companion.SDK_AVAILABLE
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.healthconnectsample.R
 import com.example.healthconnectsample.data.HealthConnectManager
 import com.example.healthconnectsample.data.ProfileRepository
-import com.example.healthconnectsample.presentation.navigation.Drawer
 import com.example.healthconnectsample.presentation.navigation.HealthConnectNavigation
 import com.example.healthconnectsample.presentation.navigation.Screen
 import com.example.healthconnectsample.presentation.theme.HealthConnectTheme
-import kotlinx.coroutines.launch
 
 const val TAG = "Health Connect sample"
 
@@ -49,83 +50,101 @@ const val TAG = "Health Connect sample"
 @Composable
 fun HealthConnectApp(
     healthConnectManager: HealthConnectManager,
-    profileRepository: ProfileRepository
+    profileRepository: ProfileRepository,
+    initialRoute: String = Screen.HomeScreen.route
 ) {
     HealthConnectTheme {
         val scaffoldState = rememberScaffoldState()
         val navController = rememberNavController()
-        val scope = rememberCoroutineScope()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
 
-        val availability by healthConnectManager.availability
-
         Scaffold(
             scaffoldState = scaffoldState,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        val titleId = when (currentRoute) {
-                            Screen.Steps.route -> Screen.Steps.titleId
-                            Screen.ExerciseSessions.route -> Screen.ExerciseSessions.titleId
-                            Screen.SleepSessions.route -> Screen.SleepSessions.titleId
-                            Screen.Profile.route -> Screen.Profile.titleId
-                            else -> R.string.app_name
-                        }
-                        Text(stringResource(titleId))
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = {
-                                if (availability == SDK_AVAILABLE) {
-                                    scope.launch {
-                                        scaffoldState.drawerState.open()
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Menu,
-                                stringResource(id = R.string.menu)
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                navController.navigate(Screen.Profile.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Person,
-                                contentDescription = "Profile"
-                            )
-                        }
-                    }
+            bottomBar = {
+                val bottomNavRoutes = listOf(
+                    Screen.HomeScreen.route,
+                    Screen.Steps.route,
+                    Screen.MealsScreen.route,
+                    Screen.MoreScreen.route,
                 )
-            },
-            drawerContent = {
-                if (availability == SDK_AVAILABLE) {
-                    Drawer(
-                        scope = scope,
-                        scaffoldState = scaffoldState,
-                        navController = navController
-                    )
+                // Only show bottom bar on the four main screens
+                if (currentRoute in bottomNavRoutes) {
+                    BottomNavigation(
+                        backgroundColor = Color(0xFF0A0A0A),
+                        contentColor    = Color(0xFF3DDB85),
+                        elevation       = 8.dp,
+                    ) {
+                        val selectedColor   = Color(0xFF3DDB85)
+                        val unselectedColor = Color(0xFF555555)
+                        BottomNavigationItem(
+                            selected = currentRoute == Screen.HomeScreen.route,
+                            onClick = {
+                                navController.navigate(Screen.HomeScreen.route) {
+                                    popUpTo(Screen.HomeScreen.route) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                            label = { Text("Home") },
+                            selectedContentColor   = selectedColor,
+                            unselectedContentColor = unselectedColor,
+                        )
+                        BottomNavigationItem(
+                            selected = currentRoute == Screen.Steps.route,
+                            onClick = {
+                                navController.navigate(Screen.Steps.route) {
+                                    popUpTo(Screen.HomeScreen.route)
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = { Icon(Icons.Default.DirectionsWalk, contentDescription = "Activity") },
+                            label = { Text("Activity") },
+                            selectedContentColor   = selectedColor,
+                            unselectedContentColor = unselectedColor,
+                        )
+                        BottomNavigationItem(
+                            selected = currentRoute == Screen.MealsScreen.route,
+                            onClick = {
+                                navController.navigate(Screen.MealsScreen.route) {
+                                    popUpTo(Screen.HomeScreen.route)
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meals") },
+                            label = { Text("Meals") },
+                            selectedContentColor   = selectedColor,
+                            unselectedContentColor = unselectedColor,
+                        )
+                        BottomNavigationItem(
+                            selected = currentRoute == Screen.MoreScreen.route,
+                            onClick = {
+                                navController.navigate(Screen.MoreScreen.route) {
+                                    popUpTo(Screen.HomeScreen.route)
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = { Icon(Icons.Default.MoreHoriz, contentDescription = "More") },
+                            label = { Text("More") },
+                            selectedContentColor   = selectedColor,
+                            unselectedContentColor = unselectedColor,
+                        )
+                    }
                 }
             },
             snackbarHost = {
                 SnackbarHost(it) { data -> Snackbar(snackbarData = data) }
             }
-        ) {
-            HealthConnectNavigation(
-                healthConnectManager = healthConnectManager,
-                profileRepository = profileRepository,
-                navController = navController,
-                scaffoldState = scaffoldState
-            )
+        ) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding)) {
+                HealthConnectNavigation(
+                    healthConnectManager = healthConnectManager,
+                    profileRepository = profileRepository,
+                    navController = navController,
+                    scaffoldState = scaffoldState,
+                    startDestination = initialRoute
+                )
+            }
         }
     }
 }

@@ -19,6 +19,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.healthconnectsample.data.api.ProductInfoResponse
 import com.example.healthconnectsample.data.api.ProductNutrimentsResponse
+import com.example.healthconnectsample.data.api.MealItem
+import com.example.healthconnectsample.data.api.MealItemNutrients
 import com.example.healthconnectsample.data.api.MealTextRequest
 import com.example.healthconnectsample.data.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +66,9 @@ sealed class MealCameraState {
 
     /** API returned an error. */
     data class CameraError(val message: String) : MealCameraState()
+
+    /** Prompt user to choose between camera/image or text input. */
+    object InputMethodChooser : MealCameraState()
 }
 
 // ─────────────────────────────────────────────
@@ -126,6 +131,10 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ── Camera controls ───────────────────────
+
+    fun showInputChooser() {
+        cameraState.value = MealCameraState.InputMethodChooser
+    }
 
     fun openCamera() {
         cameraState.value = MealCameraState.CameraOpen
@@ -289,7 +298,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                     val entryObj = org.json.JSONObject().apply {
                         put("timestamp", e.timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss")))
                         put("imageUri", e.imageUri ?: org.json.JSONObject.NULL)
-                        put("barcode", p.barcode ?: "")
+                        put("barcode", p.barcode)
                         put("product_name", p.productName ?: "")
                         put("brands", p.brands ?: "")
                         put("categories", p.categories ?: "")
@@ -300,6 +309,30 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                         put("product_quantity", p.productQuantity ?: org.json.JSONObject.NULL)
                         put("product_quantity_unit", p.productQuantityUnit ?: "")
                         put("serving_quantity", p.servingQuantity ?: org.json.JSONObject.NULL)
+                        put("description", p.description ?: "")
+                        put("insights", p.insights ?: "")
+                        p.ingredients?.let { ingr ->
+                            put("ingredients", org.json.JSONArray(ingr))
+                        }
+                        p.items?.let { itemList ->
+                            val itemsArr = org.json.JSONArray()
+                            itemList.forEach { item ->
+                                itemsArr.put(org.json.JSONObject().apply {
+                                    put("name", item.name)
+                                    put("estimated_quantity", item.estimatedQuantity)
+                                    put("nutrients", org.json.JSONObject().apply {
+                                        put("calories", item.nutrients.calories ?: org.json.JSONObject.NULL)
+                                        put("protein", item.nutrients.protein ?: org.json.JSONObject.NULL)
+                                        put("carbohydrates", item.nutrients.carbohydrates ?: org.json.JSONObject.NULL)
+                                        put("fat", item.nutrients.fat ?: org.json.JSONObject.NULL)
+                                        put("sugar", item.nutrients.sugar ?: org.json.JSONObject.NULL)
+                                        put("fiber", item.nutrients.fiber ?: org.json.JSONObject.NULL)
+                                        put("sodium", item.nutrients.sodium ?: org.json.JSONObject.NULL)
+                                    })
+                                })
+                            }
+                            put("items", itemsArr)
+                        }
                         p.nutriments?.let { n ->
                             put("nutriments", org.json.JSONObject().apply {
                                 put("energy_kcal_100g", n.energyKcal100g ?: org.json.JSONObject.NULL)
@@ -348,7 +381,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                         e.getString("timestamp"),
                         DateTimeFormatter.ofPattern("HH:mm:ss")
                     )
-                    val imageUri = if (e.isNull("imageUri")) null else e.optString("imageUri", null)
+                    val imageUri = if (e.isNull("imageUri")) null else e.optString("imageUri")
                     val nutrObj = e.optJSONObject("nutriments")
                     val nutriments = nutrObj?.let { n ->
                         fun dbl(key: String): Double? = n.optDouble(key).takeUnless { it.isNaN() }
@@ -382,6 +415,31 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                         productQuantityUnit  = e.optString("product_quantity_unit").ifEmpty { null },
                         servingQuantity      = e.optDouble("serving_quantity").takeUnless { it.isNaN() },
                         nutriments           = nutriments,
+                        description          = e.optString("description").ifEmpty { null },
+                        insights             = e.optString("insights").ifEmpty { null },
+                        ingredients          = e.optJSONArray("ingredients")?.let { arr ->
+                            (0 until arr.length()).map { arr.getString(it) }
+                        },
+                        items                = e.optJSONArray("items")?.let { arr ->
+                            (0 until arr.length()).map { idx ->
+                                val itemObj = arr.getJSONObject(idx)
+                                val nObj = itemObj.optJSONObject("nutrients")
+                                fun nd(key: String) = nObj?.optDouble(key)?.takeUnless { it.isNaN() }
+                                MealItem(
+                                    name = itemObj.optString("name"),
+                                    estimatedQuantity = itemObj.optString("estimated_quantity"),
+                                    nutrients = MealItemNutrients(
+                                        calories = nd("calories"),
+                                        protein = nd("protein"),
+                                        carbohydrates = nd("carbohydrates"),
+                                        fat = nd("fat"),
+                                        sugar = nd("sugar"),
+                                        fiber = nd("fiber"),
+                                        sodium = nd("sodium"),
+                                    )
+                                )
+                            }
+                        },
                     )
                     entries.add(MealEntry(product = product, timestamp = timestamp, imageUri = imageUri))
                 }

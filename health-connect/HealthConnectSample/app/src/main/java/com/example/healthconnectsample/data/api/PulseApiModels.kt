@@ -126,6 +126,11 @@ data class ProductInfoResponse(
     @SerializedName("product_quantity_unit") val productQuantityUnit: String? = null,
     @SerializedName("serving_size") val servingSize: String? = null,
     @SerializedName("serving_quantity") val servingQuantity: Double? = null,
+    // Meal-analysis-specific fields (null for barcode scans)
+    val description: String? = null,
+    val ingredients: List<String>? = null,
+    val insights: String? = null,
+    val items: List<MealItem>? = null,
 )
 
 data class ProductResponse(
@@ -136,6 +141,22 @@ data class ProductResponse(
 
 // ===== Meal Analysis Models =====
 // Reuses ProductInfoResponse so the result card UI works for both barcode and meal flows.
+
+data class MealItemNutrients(
+    val calories: Double? = null,
+    val protein: Double? = null,
+    val carbohydrates: Double? = null,
+    val fat: Double? = null,
+    val sugar: Double? = null,
+    val fiber: Double? = null,
+    val sodium: Double? = null,
+)
+
+data class MealItem(
+    val name: String,
+    @SerializedName("estimated_quantity") val estimatedQuantity: String,
+    val nutrients: MealItemNutrients,
+)
 
 data class MealAnalysisResponse(
     val status: String,                       // "analyzed" | "error"

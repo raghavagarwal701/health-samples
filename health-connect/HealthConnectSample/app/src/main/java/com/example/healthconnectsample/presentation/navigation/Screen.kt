@@ -45,4 +45,5 @@ enum class Screen(val route: String, val titleId: Int, val hasMenuItem: Boolean 
     Profile("profile_screen", R.string.profile_screen, false),
     ProductScanner("product_scanner_screen", R.string.product_scanner_screen),
     MealsScreen("meals_screen", R.string.meals_screen),
+    MoreScreen("more_screen", R.string.more_screen, false),
 }

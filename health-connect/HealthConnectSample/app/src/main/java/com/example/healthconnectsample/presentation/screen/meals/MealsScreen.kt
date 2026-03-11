@@ -57,6 +57,7 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.healthconnectsample.data.api.ProductInfoResponse
 import com.example.healthconnectsample.data.api.ProductNutrimentsResponse
+import com.example.healthconnectsample.data.api.MealItem
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -93,6 +94,13 @@ fun MealsScreen(viewModel: MealsViewModel) {
         is MealCameraState.LogView -> {
             MealLogView(viewModel = viewModel, selectedDate = selectedDate)
         }
+        is MealCameraState.InputMethodChooser -> {
+            MealInputMethodChooser(
+                onCamera = { viewModel.openCamera() },
+                onClose = { viewModel.closeCamera() },
+                viewModel = viewModel
+            )
+        }
         is MealCameraState.CameraOpen -> {
             val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
             LaunchedEffect(Unit) {
@@ -106,9 +114,6 @@ fun MealsScreen(viewModel: MealsViewModel) {
             } else {
                 MealCameraView(
                     onPhotoTaken = { bytes, uri -> viewModel.onPhotoTaken(bytes, uri) },
-                    onGalleryImagePicked = { uri ->
-                        viewModel.onGalleryImagePicked(context, uri)
-                    },
                     onClose = viewModel::closeCamera,
                     viewModel = viewModel
                 )
@@ -146,6 +151,148 @@ fun MealsScreen(viewModel: MealsViewModel) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Input method chooser (camera vs text)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@kotlin.OptIn(ExperimentalMaterialApi::class)
+@Composable
+private fun MealInputMethodChooser(
+    onCamera: () -> Unit,
+    onClose: () -> Unit,
+    viewModel: MealsViewModel,
+) {
+    var showTextDialog by remember { mutableStateOf(false) }
+
+    if (showTextDialog) {
+        MealTextInputDialog(
+            onDismiss = { showTextDialog = false },
+            onSubmit = { description ->
+                showTextDialog = false
+                viewModel.analyzeTextDescription(description)
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colors.background),
+        contentAlignment = Alignment.Center
+    ) {
+        // Close button in top-end corner
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Cancel",
+                tint = MaterialTheme.colors.onSurface
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "Add a meal",
+                style = MaterialTheme.typography.h5,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "How would you like to log it?",
+                style = MaterialTheme.typography.body1,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            // Camera / image option
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                elevation = 4.dp,
+                onClick = onCamera
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(MaterialTheme.colors.primary.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Take a photo",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Photograph your meal and let AI analyse it",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+            // Text description option
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                elevation = 4.dp,
+                onClick = { showTextDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(Color(0xFF7B61FF).copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = Color(0xFF7B61FF),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Describe in text",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Type what you ate and AI will estimate nutrients",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Meal Log View (main content)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -170,7 +317,7 @@ private fun MealLogView(viewModel: MealsViewModel, selectedDate: LocalDate) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = viewModel::openCamera,
+                onClick = viewModel::showInputChooser,
                 backgroundColor = MaterialTheme.colors.primary,
                 modifier = Modifier.size(64.dp)
             ) {
@@ -277,7 +424,7 @@ private fun DateSelectorBar(
     }
 
     Surface(
-        color = MaterialTheme.colors.primary,
+        color = MaterialTheme.colors.surface,
         elevation = 4.dp
     ) {
         Row(
@@ -291,7 +438,7 @@ private fun DateSelectorBar(
                 Icon(
                     imageVector = Icons.Default.ChevronLeft,
                     contentDescription = "Previous day",
-                    tint = Color.White
+                    tint = MaterialTheme.colors.primary
                 )
             }
 
@@ -313,7 +460,7 @@ private fun DateSelectorBar(
             ) {
                 Text(
                     text = label,
-                    color = Color.White,
+                    color = MaterialTheme.colors.primary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp
                 )
@@ -327,7 +474,7 @@ private fun DateSelectorBar(
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = "Next day",
-                    tint = if (selectedDate.isBefore(today)) Color.White else Color.White.copy(alpha = 0.3f)
+                    tint = if (selectedDate.isBefore(today)) MaterialTheme.colors.primary else MaterialTheme.colors.primary.copy(alpha = 0.3f)
                 )
             }
         }
@@ -528,12 +675,11 @@ private fun MiniNutrientChip(label: String, color: Color) {
 @Composable
 private fun MealCameraView(
     onPhotoTaken: (ByteArray, Uri?) -> Unit,
-    onGalleryImagePicked: (Uri) -> Unit,
     onClose: () -> Unit,
     viewModel: MealsViewModel,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     val imageCaptureUseCase = remember { ImageCapture.Builder().build() }
 
@@ -1054,13 +1200,37 @@ fun MealDetailDialog(entry: MealEntry, onClose: () -> Unit) {
 
                     Spacer(Modifier.height(16.dp))
                     
-                    // Nutrition Facts reusing similar layout to ProductScannerScreen
+                    // Nutrition Facts
                     product.nutriments?.let {
                         NutritionFactsCard(
                             nutriments = it,
-                            productQuantity = product.servingQuantity,
-                            quantityUnit = product.productQuantityUnit
+                            isMealAnalysis = product.barcode == "MEAL_PHOTO",
+                            servingSize = product.servingSize,
                         )
+                    }
+
+                    // Description
+                    product.description?.let { desc ->
+                        Spacer(Modifier.height(12.dp))
+                        DescriptionCard(desc)
+                    }
+
+                    // Ingredients
+                    product.ingredients?.takeIf { it.isNotEmpty() }?.let { ingr ->
+                        Spacer(Modifier.height(12.dp))
+                        IngredientsCard(ingr)
+                    }
+
+                    // Insights
+                    product.insights?.let { insight ->
+                        Spacer(Modifier.height(12.dp))
+                        InsightsCard(insight)
+                    }
+
+                    // Items Breakdown
+                    product.items?.takeIf { it.isNotEmpty() }?.let { items ->
+                        Spacer(Modifier.height(12.dp))
+                        ItemsBreakdownCard(items)
                     }
                 }
             }
@@ -1075,29 +1245,67 @@ fun MealDetailDialog(entry: MealEntry, onClose: () -> Unit) {
 @Composable
 private fun NutritionFactsCard(
     nutriments: ProductNutrimentsResponse,
-    productQuantity: Double?,
-    quantityUnit: String?,
+    isMealAnalysis: Boolean = false,
+    servingSize: String? = null,
+    productQuantity: Double? = null,
+    quantityUnit: String? = null,
 ) {
-    val pkgLabel = if (productQuantity != null) "for ${productQuantity}${quantityUnit ?: "g"}" else "total estimated"
+    val totalLabel = when {
+        isMealAnalysis && servingSize != null -> "Total ($servingSize)"
+        isMealAnalysis -> "Total"
+        productQuantity != null -> "for ${productQuantity}${quantityUnit ?: "g"}"
+        else -> "total estimated"
+    }
     Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Nutrition Estimate", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.weight(1f))
-                Text("per 100g", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp), textAlign = TextAlign.End)
-                Text(pkgLabel, style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colors.primary, modifier = Modifier.width(88.dp), textAlign = TextAlign.End)
+                if (!isMealAnalysis) {
+                    Text("per 100g", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp), textAlign = TextAlign.End)
+                }
+                Text(totalLabel, style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colors.primary, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Divider()
-            NutrientRow("Energy", nutriments.energyKcal100g, nutriments.energyKcalPkg, "kcal")
-            NutrientRow("Fat", nutriments.fat100g, nutriments.fatPkg, "g")
-            NutrientRow("Carbohydrates", nutriments.carbohydrates100g, nutriments.carbohydratesPkg, "g")
-            NutrientRow("  Sugars", nutriments.sugars100g, nutriments.sugarsPkg, "g")
-            NutrientRow("Protein", nutriments.proteins100g, nutriments.proteinsPkg, "g")
-            NutrientRow("Fiber", nutriments.fiber100g, nutriments.fiberPkg, "g")
-            NutrientRow("Salt", nutriments.salt100g, nutriments.saltPkg, "g")
+            if (isMealAnalysis) {
+                MealNutrientRow("Energy", nutriments.energyKcalPkg, "kcal")
+                MealNutrientRow("Fat", nutriments.fatPkg, "g")
+                MealNutrientRow("Carbohydrates", nutriments.carbohydratesPkg, "g")
+                MealNutrientRow("  Sugars", nutriments.sugarsPkg, "g")
+                MealNutrientRow("Protein", nutriments.proteinsPkg, "g")
+                MealNutrientRow("Fiber", nutriments.fiberPkg, "g")
+                MealNutrientRow("Salt", nutriments.saltPkg, "g")
+            } else {
+                NutrientRow("Energy", nutriments.energyKcal100g, nutriments.energyKcalPkg, "kcal")
+                NutrientRow("Fat", nutriments.fat100g, nutriments.fatPkg, "g")
+                NutrientRow("Carbohydrates", nutriments.carbohydrates100g, nutriments.carbohydratesPkg, "g")
+                NutrientRow("  Sugars", nutriments.sugars100g, nutriments.sugarsPkg, "g")
+                NutrientRow("Protein", nutriments.proteins100g, nutriments.proteinsPkg, "g")
+                NutrientRow("Fiber", nutriments.fiber100g, nutriments.fiberPkg, "g")
+                NutrientRow("Salt", nutriments.salt100g, nutriments.saltPkg, "g")
+            }
         }
+    }
+}
+
+@Composable
+private fun MealNutrientRow(label: String, value: Double?, unit: String) {
+    if (value == null) return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+        Text(
+            text = "%.1f %s".format(value, unit),
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colors.primary,
+            modifier = Modifier.width(96.dp),
+            textAlign = TextAlign.End,
+        )
     }
 }
 
@@ -1120,8 +1328,90 @@ private fun NutrientRow(label: String, per100g: Double?, perPkg: Double?, unit: 
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colors.primary,
-            modifier = Modifier.width(88.dp),
+            modifier = Modifier.width(96.dp),
             textAlign = TextAlign.End
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Meal Analysis Detail Cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun DescriptionCard(description: String) {
+    Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("About this Meal", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(description, style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface.copy(alpha = 0.85f))
+        }
+    }
+}
+
+@Composable
+private fun IngredientsCard(ingredients: List<String>) {
+    Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Ingredients", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            ingredients.forEach { ingredient ->
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text("• ", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.primary)
+                    Text(ingredient, style = MaterialTheme.typography.body2)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightsCard(insights: String) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        elevation = 2.dp,
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f),
+    ) {
+        Row(modifier = Modifier.padding(16.dp)) {
+            Text("💡", fontSize = 20.sp, modifier = Modifier.padding(end = 10.dp, top = 2.dp))
+            Column {
+                Text("Health Insights", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(insights, style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface.copy(alpha = 0.85f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemsBreakdownCard(items: List<MealItem>) {
+    Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Breakdown by Item", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            // Header row
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("Item", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1.8f))
+                Text("kcal", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
+                Text("Protein", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.9f), textAlign = TextAlign.End)
+                Text("Carbs", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
+                Text("Fat", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.7f), textAlign = TextAlign.End)
+            }
+            Divider(modifier = Modifier.padding(vertical = 4.dp))
+            items.forEach { item ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1.8f)) {
+                        Text(item.name, style = MaterialTheme.typography.body2, fontWeight = FontWeight.Medium)
+                        Text(item.estimatedQuantity, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.onSurface.copy(alpha = 0.55f))
+                    }
+                    fun fmt(v: Double?) = if (v != null) "%.0f".format(v) else "–"
+                    Text(fmt(item.nutrients.calories), style = MaterialTheme.typography.body2, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
+                    Text(fmt(item.nutrients.protein)  + "g", style = MaterialTheme.typography.body2, modifier = Modifier.weight(0.9f), textAlign = TextAlign.End)
+                    Text(fmt(item.nutrients.carbohydrates) + "g", style = MaterialTheme.typography.body2, modifier = Modifier.weight(0.8f), textAlign = TextAlign.End)
+                    Text(fmt(item.nutrients.fat) + "g", style = MaterialTheme.typography.body2, modifier = Modifier.weight(0.7f), textAlign = TextAlign.End)
+                }
+            }
+        }
     }
 }

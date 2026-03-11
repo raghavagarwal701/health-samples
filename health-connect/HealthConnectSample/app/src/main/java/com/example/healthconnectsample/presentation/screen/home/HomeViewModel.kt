@@ -12,13 +12,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.healthconnectsample.data.HealthConnectManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 data class HomeData(
@@ -51,26 +51,64 @@ class HomeViewModel(
     var homeData = mutableStateOf(HomeData())
         private set
 
+    var isRefreshing = mutableStateOf(false)
+        private set
+
+    // ── Date navigation ──────────────────────────────────────────────────────
+    val selectedDate = mutableStateOf(LocalDate.now())
+
+    fun previousDay() {
+        selectedDate.value = selectedDate.value.minusDays(1)
+        viewModelScope.launch {
+            tryWithPermissionsCheck { loadDataForDate(selectedDate.value) }
+        }
+    }
+
+    fun nextDay() {
+        if (selectedDate.value.isBefore(LocalDate.now())) {
+            selectedDate.value = selectedDate.value.plusDays(1)
+            viewModelScope.launch {
+                tryWithPermissionsCheck { loadDataForDate(selectedDate.value) }
+            }
+        }
+    }
+
+    fun selectDate(date: LocalDate) {
+        selectedDate.value = date
+        viewModelScope.launch {
+            tryWithPermissionsCheck { loadDataForDate(date) }
+        }
+    }
+
     val permissionsLauncher = healthConnectManager.requestPermissionsActivityContract()
 
     private val prefs = application.getSharedPreferences("pulse_meal_log", Context.MODE_PRIVATE)
 
     fun initialLoad() {
         viewModelScope.launch {
-            tryWithPermissionsCheck { loadTodayData() }
+            tryWithPermissionsCheck { loadDataForDate(selectedDate.value) }
         }
     }
 
-    private suspend fun loadTodayData() {
-        val now = Instant.now()
+    fun refresh() {
+        viewModelScope.launch {
+            isRefreshing.value = true
+            tryWithPermissionsCheck { loadDataForDate(selectedDate.value) }
+            delay(600)
+            isRefreshing.value = false
+        }
+    }
+
+    private suspend fun loadDataForDate(date: LocalDate) {
         val zoneId = ZoneId.systemDefault()
-        val todayStart = ZonedDateTime.ofInstant(now, zoneId).truncatedTo(ChronoUnit.DAYS)
+        val today = LocalDate.now()
+        val dayStart = date.atStartOfDay(zoneId)
+        val dayEnd = if (date == today) ZonedDateTime.ofInstant(Instant.now(), zoneId) else dayStart.plusDays(1)
 
-        val steps = healthConnectManager.readStepsAggregate(todayStart.toInstant(), now) ?: 0L
-        val distance = healthConnectManager.readDistanceAggregate(todayStart.toInstant(), now)
-        val burned = healthConnectManager.readCaloriesAggregate(todayStart.toInstant(), now)
-
-        val consumed = readTodayConsumedKcal()
+        val steps = healthConnectManager.readStepsAggregate(dayStart.toInstant(), dayEnd.toInstant()) ?: 0L
+        val distance = healthConnectManager.readDistanceAggregate(dayStart.toInstant(), dayEnd.toInstant())
+        val burned = healthConnectManager.readCaloriesAggregate(dayStart.toInstant(), dayEnd.toInstant())
+        val consumed = readConsumedKcalForDate(date)
 
         homeData.value = HomeData(
             caloriesBurned = burned?.inKilocalories ?: 0.0,
@@ -80,15 +118,15 @@ class HomeViewModel(
         )
     }
 
-    /** Reads today's total kcal consumed from the shared meal-log SharedPreferences. */
-    private fun readTodayConsumedKcal(): Double {
+    /** Reads total kcal consumed from the shared meal-log SharedPreferences for the given date. */
+    private fun readConsumedKcalForDate(date: LocalDate): Double {
         val json = prefs.getString("meal_log_v2", null) ?: return 0.0
         return try {
             val daysArray = org.json.JSONArray(json)
-            val todayStr = LocalDate.now().toString()
+            val dateStr = date.toString()
             for (i in 0 until daysArray.length()) {
                 val dayObj = daysArray.getJSONObject(i)
-                if (dayObj.getString("date") == todayStr) {
+                if (dayObj.getString("date") == dateStr) {
                     val entries = dayObj.getJSONArray("entries")
                     var total = 0.0
                     for (j in 0 until entries.length()) {

@@ -15,7 +15,10 @@
   ~ limitations under the License.
   -->
 <resources>
-    <style name="Theme.HealthConnect" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/health_connect_blue</item>
+    <style name="Theme.HealthConnect" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#FF0A0A0A</item>
+        <item name="android:navigationBarColor">#FF0A0A0A</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

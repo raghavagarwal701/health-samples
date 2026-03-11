@@ -20,10 +20,16 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorPalette = darkColors(
     primary = HealthConnectGreen,
-    secondary = HealthConnectBlue
+    primaryVariant = HealthConnectGreen,
+    secondary = HealthConnectBlue,
+    background = Color(0xFF0A0A0A),
+    surface = Color(0xFF1A1A1A),
+    onBackground = Color.White,
+    onSurface = Color.White,
 )
 
 private val LightColorPalette = lightColors(

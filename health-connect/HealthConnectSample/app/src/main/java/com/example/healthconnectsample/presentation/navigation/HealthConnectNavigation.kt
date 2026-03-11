@@ -16,12 +16,18 @@
 package com.example.healthconnectsample.presentation.navigation
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideIn
+import androidx.compose.animation.slideOut
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.ScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,8 +77,10 @@ import android.app.Application
 import androidx.compose.ui.platform.LocalContext
 import com.example.healthconnectsample.presentation.screen.home.HomeScreen
 import com.example.healthconnectsample.presentation.screen.home.HomeViewModel
+import com.example.healthconnectsample.presentation.screen.meals.MealEntry
 import com.example.healthconnectsample.presentation.screen.meals.MealsScreen
 import com.example.healthconnectsample.presentation.screen.meals.MealsViewModel
+import com.example.healthconnectsample.presentation.screen.more.MoreScreen
 
 /**
  * Provides the navigation in the app.
@@ -82,10 +90,26 @@ fun HealthConnectNavigation(
     navController: NavHostController,
     healthConnectManager: HealthConnectManager,
     profileRepository: ProfileRepository,
-    scaffoldState: ScaffoldState
+    scaffoldState: ScaffoldState,
+    startDestination: String = Screen.HomeScreen.route
 ) {
     val scope = rememberCoroutineScope()
-    NavHost(navController = navController, startDestination = Screen.HomeScreen.route) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        enterTransition = {
+            slideIn(animationSpec = tween(300)) { IntOffset(it.width, 0) } + fadeIn(tween(300))
+        },
+        exitTransition = {
+            slideOut(animationSpec = tween(300)) { IntOffset(-it.width / 3, 0) } + fadeOut(tween(300))
+        },
+        popEnterTransition = {
+            slideIn(animationSpec = tween(300)) { IntOffset(-it.width / 3, 0) } + fadeIn(tween(300))
+        },
+        popExitTransition = {
+            slideOut(animationSpec = tween(300)) { IntOffset(it.width, 0) } + fadeOut(tween(300))
+        }
+    ) {
         val availability by healthConnectManager.availability
         composable(Screen.HomeScreen.route) {
             val context = LocalContext.current
@@ -95,8 +119,13 @@ fun HealthConnectNavigation(
                     healthConnectManager = healthConnectManager
                 )
             )
+            // Share the same MealsViewModel instance (persists across tabs)
+            val mealsViewModel: MealsViewModel = viewModel(
+                factory = MealsViewModel.Factory(context.applicationContext as Application)
+            )
             val permissionsGranted by viewModel.permissionsGranted
             val homeData by viewModel.homeData
+            val selectedDate by viewModel.selectedDate
             val permissions = viewModel.permissions
             val onPermissionsResult = { viewModel.initialLoad() }
 
@@ -119,6 +148,10 @@ fun HealthConnectNavigation(
                 permissionsGranted = permissionsGranted,
                 permissions = permissions,
                 homeData = homeData,
+                selectedDate = selectedDate,
+                onPreviousDay = { viewModel.previousDay() },
+                onNextDay = { viewModel.nextDay() },
+                onPickDate = { date -> viewModel.selectDate(date) },
                 uiState = viewModel.uiState.value,
                 onError = { exception ->
                     showExceptionSnackbar(scaffoldState, scope, exception)
@@ -126,7 +159,10 @@ fun HealthConnectNavigation(
                 onPermissionsResult = { viewModel.initialLoad() },
                 onPermissionsLaunch = { values -> permissionsLauncher.launch(values) },
                 onNavigateToMeals = { navController.navigate(Screen.MealsScreen.route) },
-                onNavigateToSteps = { navController.navigate(Screen.Steps.route) }
+                onNavigateToSteps = { navController.navigate(Screen.Steps.route) },
+                recentMeals = mealsViewModel.entriesForDate(selectedDate).takeLast(2),
+                isRefreshing = viewModel.isRefreshing.value,
+                onRefresh = { viewModel.refresh() },
             )
         }
         composable(Screen.WelcomeScreen.route) {
@@ -307,16 +343,24 @@ fun HealthConnectNavigation(
             val permissionsGranted by viewModel.permissionsGranted
             val todayData by viewModel.todayData
             val weeklyData by viewModel.weeklyData
+            val dailyActivity by viewModel.dailyActivity
+            val selectedDate by viewModel.selectedDate
             val permissions = viewModel.permissions
-            val onPermissionsResult = {viewModel.initialLoad()}
+            val onPermissionsResult = { viewModel.initialLoad() }
             val permissionsLauncher =
                 rememberLauncherForActivityResult(viewModel.permissionsLauncher) {
-                    onPermissionsResult()}
+                    onPermissionsResult()
+                }
             StepsScreen(
                 permissionsGranted = permissionsGranted,
                 permissions = permissions,
                 todayData = todayData,
                 weeklyData = weeklyData,
+                dailyActivity = dailyActivity,
+                selectedDate = selectedDate,
+                onPreviousDay = { viewModel.previousDay() },
+                onNextDay = { viewModel.nextDay() },
+                onPickDate = { date -> viewModel.selectDate(date) },
                 uiState = viewModel.uiState,
                 onError = { exception ->
                     showExceptionSnackbar(scaffoldState, scope, exception)
@@ -325,7 +369,8 @@ fun HealthConnectNavigation(
                     viewModel.initialLoad()
                 },
                 onPermissionsLaunch = { values ->
-                    permissionsLauncher.launch(values)}
+                    permissionsLauncher.launch(values)
+                }
             )
         }
         composable(Screen.ChatScreen.route) {
@@ -377,6 +422,16 @@ fun HealthConnectNavigation(
                 factory = MealsViewModel.Factory(context.applicationContext as Application)
             )
             MealsScreen(viewModel = viewModel)
+        }
+        composable(Screen.MoreScreen.route) {
+            MoreScreen(
+                onNavigateTo = { route ->
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
         }
     }
 }
