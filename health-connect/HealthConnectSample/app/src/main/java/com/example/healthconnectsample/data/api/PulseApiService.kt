@@ -49,6 +49,7 @@ interface PulseApiService {
     suspend fun analyzeMeal(
         @Part image: MultipartBody.Part,
         @Part("note") note: RequestBody? = null,
+        @Part("question") question: RequestBody? = null,
     ): Response<MealAnalysisResponse>
 
     /**

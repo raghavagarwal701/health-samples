@@ -40,7 +40,37 @@ sealed class ScannerUiState {
     data class ProductFound(val product: ProductInfoResponse) : ScannerUiState()
 
     /** Meal analysed successfully – same result card as ProductFound. */
-    data class MealFound(val product: ProductInfoResponse) : ScannerUiState()
+    data class MealFound(
+        val product: ProductInfoResponse,
+        val askedQuestion: String? = null,
+        val questionAnswer: String? = null,
+        val mealImageBytes: ByteArray? = null,
+    ) : ScannerUiState() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as MealFound
+
+            if (product != other.product) return false
+            if (askedQuestion != other.askedQuestion) return false
+            if (questionAnswer != other.questionAnswer) return false
+            if (mealImageBytes != null) {
+                if (other.mealImageBytes == null) return false
+                if (!mealImageBytes.contentEquals(other.mealImageBytes)) return false
+            } else if (other.mealImageBytes != null) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = product.hashCode()
+            result = 31 * result + (askedQuestion?.hashCode() ?: 0)
+            result = 31 * result + (questionAnswer?.hashCode() ?: 0)
+            result = 31 * result + (mealImageBytes?.contentHashCode() ?: 0)
+            return result
+        }
+    }
 
     /** Barcode not found in OpenFoodFacts. */
     data class NotFound(val barcode: String) : ScannerUiState()
@@ -103,8 +133,8 @@ class ProductScannerViewModel : ViewModel() {
      * Called when the user taps the shutter button (CameraX ImageCapture result).
      * [imageBytes] is raw JPEG bytes from the captured image.
      */
-    fun onPhotoTaken(imageBytes: ByteArray) {
-        analyzeMeal(imageBytes, "image/jpeg")
+    fun onPhotoTaken(imageBytes: ByteArray, question: String? = null) {
+        analyzeMeal(imageBytes, "image/jpeg", question)
     }
 
     /**
@@ -112,7 +142,7 @@ class ProductScannerViewModel : ViewModel() {
      * Decodes the URI into a Bitmap first, then re-compresses to JPEG so the backend
      * always receives a valid JPEG regardless of the original format (HEIC, WEBP, PNG…).
      */
-    fun onGalleryImagePicked(context: Context, uri: Uri) {
+    fun onGalleryImagePicked(context: Context, uri: Uri, question: String? = null) {
         uiState.value = ScannerUiState.AnalyzingMeal
         viewModelScope.launch {
             try {
@@ -134,7 +164,7 @@ class ProductScannerViewModel : ViewModel() {
                     uiState.value = ScannerUiState.Error("Could not read image from gallery")
                     return@launch
                 }
-                analyzeMeal(jpegBytes, "image/jpeg")
+                analyzeMeal(jpegBytes, "image/jpeg", question)
             } catch (e: Exception) {
                 uiState.value = ScannerUiState.Error(
                     "Gallery error: ${e.localizedMessage ?: "Unknown error"}"
@@ -143,18 +173,27 @@ class ProductScannerViewModel : ViewModel() {
         }
     }
 
-    private fun analyzeMeal(imageBytes: ByteArray, mimeType: String) {
+    private fun analyzeMeal(imageBytes: ByteArray, mimeType: String, question: String? = null) {
         uiState.value = ScannerUiState.AnalyzingMeal
         viewModelScope.launch {
             try {
                 val requestBody = imageBytes.toRequestBody(mimeType.toMediaTypeOrNull())
                 val part = MultipartBody.Part.createFormData("image", "meal.jpg", requestBody)
+                val questionBody = question
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-                val response = RetrofitClient.apiService.analyzeMeal(part)
+                val response = RetrofitClient.apiService.analyzeMeal(part, question = questionBody)
                 if (response.isSuccessful) {
                     val body = response.body()!!
                     uiState.value = if (body.status == "analyzed" && body.product != null) {
-                        ScannerUiState.MealFound(body.product)
+                        ScannerUiState.MealFound(
+                            product = body.product,
+                            askedQuestion = body.askedQuestion,
+                            questionAnswer = body.questionAnswer,
+                            mealImageBytes = imageBytes,
+                        )
                     } else {
                         ScannerUiState.Error(body.error ?: "Meal analysis returned no data")
                     }

@@ -31,14 +31,14 @@ import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Hotel
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.Hotel
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,13 +54,13 @@ private data class MoreItem(
 )
 
 private val moreItems = listOf(
-    MoreItem(Screen.Profile, Icons.Default.Person),
-    MoreItem(Screen.ExerciseSessions, Icons.Default.DirectionsRun),
-    MoreItem(Screen.SleepSessions, Icons.Default.Hotel),
-    MoreItem(Screen.HeartRate, Icons.Default.Favorite),
-    MoreItem(Screen.ChatScreen, Icons.Default.Chat),
-    MoreItem(Screen.ProductScanner, Icons.Default.CameraAlt),
-    MoreItem(Screen.SettingsScreen, Icons.Default.Settings),
+    MoreItem(Screen.Profile, Icons.Outlined.Person),
+    MoreItem(Screen.ExerciseSessions, Icons.AutoMirrored.Outlined.DirectionsRun),
+    MoreItem(Screen.SleepSessions, Icons.Outlined.Hotel),
+    MoreItem(Screen.HeartRate, Icons.Outlined.Favorite),
+    MoreItem(Screen.ChatScreen, Icons.AutoMirrored.Outlined.Chat),
+    MoreItem(Screen.Steps, Icons.AutoMirrored.Outlined.DirectionsWalk),
+    MoreItem(Screen.SettingsScreen, Icons.Outlined.Settings),
 )
 
 @Composable
@@ -99,7 +99,7 @@ fun MoreScreen(
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = Icons.Default.ChevronRight,
+                    imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
                 )

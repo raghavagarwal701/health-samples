@@ -38,7 +38,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Grain
+import androidx.compose.material.icons.outlined.Opacity
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -187,7 +200,7 @@ private fun MealInputMethodChooser(
                 .padding(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Close,
+                imageVector = Icons.Outlined.Close,
                 contentDescription = "Cancel",
                 tint = MaterialTheme.colors.onSurface
             )
@@ -229,7 +242,7 @@ private fun MealInputMethodChooser(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CameraAlt,
+                            imageVector = Icons.Outlined.CameraAlt,
                             contentDescription = null,
                             tint = MaterialTheme.colors.primary,
                             modifier = Modifier.size(28.dp)
@@ -268,7 +281,7 @@ private fun MealInputMethodChooser(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
+                            imageVector = Icons.Outlined.Edit,
                             contentDescription = null,
                             tint = Color(0xFF7B61FF),
                             modifier = Modifier.size(28.dp)
@@ -322,7 +335,7 @@ private fun MealLogView(viewModel: MealsViewModel, selectedDate: LocalDate) {
                 modifier = Modifier.size(64.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Outlined.Add,
                     contentDescription = "Add meal",
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
@@ -436,7 +449,7 @@ private fun DateSelectorBar(
         ) {
             IconButton(onClick = onPrevious) {
                 Icon(
-                    imageVector = Icons.Default.ChevronLeft,
+                    imageVector = Icons.Outlined.ChevronLeft,
                     contentDescription = "Previous day",
                     tint = MaterialTheme.colors.primary
                 )
@@ -472,7 +485,7 @@ private fun DateSelectorBar(
                 enabled = selectedDate.isBefore(today)
             ) {
                 Icon(
-                    imageVector = Icons.Default.ChevronRight,
+                    imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = "Next day",
                     tint = if (selectedDate.isBefore(today)) MaterialTheme.colors.primary else MaterialTheme.colors.primary.copy(alpha = 0.3f)
                 )
@@ -512,25 +525,30 @@ private fun MacroSummaryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                MacroChip(emoji = "🔥", value = kcal, unit = "kcal", color = Color(0xFFFF6B35))
-                MacroChip(emoji = "🥩", value = protein, unit = "g protein", color = Color(0xFF4CAF50))
-                MacroChip(emoji = "🍞", value = carbs, unit = "g carbs", color = Color(0xFF2196F3))
-                MacroChip(emoji = "🫙", value = fat, unit = "g fat", color = Color(0xFFFF9800))
+                MacroChip(icon = Icons.Outlined.Bolt, value = kcal, unit = "kcal")
+                MacroChip(icon = Icons.Outlined.Restaurant, value = protein, unit = "g protein")
+                MacroChip(icon = Icons.Outlined.Grain, value = carbs, unit = "g carbs")
+                MacroChip(icon = Icons.Outlined.Opacity, value = fat, unit = "g fat")
             }
         }
     }
 }
 
 @Composable
-private fun MacroChip(emoji: String, value: Double, unit: String, color: Color) {
+private fun MacroChip(icon: androidx.compose.ui.graphics.vector.ImageVector, value: Double, unit: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 22.sp)
+        Icon(
+            imageVector = icon,
+            contentDescription = unit,
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colors.onSurface
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             text = "%.0f".format(value),
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
-            color = color
+            color = MaterialTheme.colors.onSurface
         )
         Text(
             text = unit,
@@ -612,23 +630,34 @@ private fun MealEntryCard(entry: MealEntry, onClick: () -> Unit, onDelete: () ->
                     if (kcal != null) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFFF6B35).copy(alpha = 0.15f)
+                            color = MaterialTheme.colors.surface
                         ) {
-                            Text(
-                                text = "🔥 ${"%.0f".format(kcal)} kcal",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFFFF6B35),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Bolt,
+                                    contentDescription = "Calories",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colors.onSurface
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "${"%.0f".format(kcal)} kcal",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colors.onSurface
+                                )
+                            }
                         }
                         Spacer(Modifier.width(6.dp))
                     }
                     // Protein / Carbs / Fat mini chips
                     product.nutriments?.let { n ->
-                        MiniNutrientChip("P ${n.proteinsPkg?.let { "%.0f".format(it) } ?: "–"}g", Color(0xFF4CAF50))
+                        MiniNutrientChip(Icons.Outlined.Restaurant, "P", n.proteinsPkg?.let { "%.0f".format(it) } ?: "–")
                         Spacer(Modifier.width(4.dp))
-                        MiniNutrientChip("C ${n.carbohydratesPkg?.let { "%.0f".format(it) } ?: "–"}g", Color(0xFF2196F3))
+                        MiniNutrientChip(Icons.Outlined.Grain, "C", n.carbohydratesPkg?.let { "%.0f".format(it) } ?: "–")
                     }
                 }
             }
@@ -642,7 +671,7 @@ private fun MealEntryCard(entry: MealEntry, onClick: () -> Unit, onDelete: () ->
                 Spacer(Modifier.height(4.dp))
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        imageVector = Icons.Default.DeleteOutline,
+                        imageVector = Icons.Outlined.DeleteOutline,
                         contentDescription = "Remove",
                         tint = MaterialTheme.colors.error.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
@@ -654,17 +683,28 @@ private fun MealEntryCard(entry: MealEntry, onClick: () -> Unit, onDelete: () ->
 }
 
 @Composable
-private fun MiniNutrientChip(label: String, color: Color) {
+private fun MiniNutrientChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
     Surface(
         shape = RoundedCornerShape(5.dp),
-        color = color.copy(alpha = 0.12f)
+        color = MaterialTheme.colors.surface
     ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            color = color,
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(10.dp),
+                tint = MaterialTheme.colors.onSurface
+            )
+            Spacer(Modifier.width(2.dp))
+            Text(
+                text = "$label $value",
+                fontSize = 10.sp,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
     }
 }
 
@@ -745,7 +785,7 @@ private fun MealCameraView(
                 .background(Color.Black.copy(alpha = 0.45f), CircleShape)
         ) {
             Icon(
-                imageVector = Icons.Default.Close,
+                imageVector = Icons.Outlined.Close,
                 contentDescription = "Close camera",
                 tint = Color.White
             )
@@ -788,7 +828,7 @@ private fun MealCameraView(
                     .background(Color.White.copy(alpha = 0.18f), CircleShape)
             ) {
                 Icon(
-                    imageVector = Icons.Default.PhotoLibrary,
+                    imageVector = Icons.Outlined.PhotoLibrary,
                     contentDescription = "Pick from gallery",
                     tint = Color.White,
                     modifier = Modifier.size(26.dp)
@@ -805,7 +845,7 @@ private fun MealCameraView(
                     .background(Color.White.copy(alpha = 0.18f), CircleShape)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    imageVector = Icons.Outlined.Edit,
                     contentDescription = "Describe meal in text",
                     tint = Color.White,
                     modifier = Modifier.size(26.dp)
@@ -920,7 +960,7 @@ private fun MealPhotoPreviewScreen(
                             .background(Color(0xFFE53935), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Close,
+                            imageVector = Icons.Outlined.Close,
                             contentDescription = "Retake photo",
                             tint = Color.White,
                             modifier = Modifier.size(34.dp)
@@ -939,7 +979,7 @@ private fun MealPhotoPreviewScreen(
                             .background(Color(0xFF43A047), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Check,
+                            imageVector = Icons.Outlined.Check,
                             contentDescription = "Confirm and analyse",
                             tint = Color.White,
                             modifier = Modifier.size(34.dp)
@@ -1000,7 +1040,7 @@ private fun MealErrorView(message: String, onRetry: () -> Unit, onClose: () -> U
             modifier = Modifier.padding(32.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.ErrorOutline,
+                imageVector = Icons.Outlined.ErrorOutline,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colors.error
@@ -1084,7 +1124,7 @@ private fun MealCameraPermissionNeeded(
             modifier = Modifier.padding(32.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.CameraAlt,
+                imageVector = Icons.Outlined.CameraAlt,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colors.primary
@@ -1165,7 +1205,7 @@ fun MealDetailDialog(entry: MealEntry, onClose: () -> Unit) {
                             .background(Color.Black.copy(alpha = 0.4f), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Close,
+                            imageVector = Icons.Outlined.Close,
                             contentDescription = "Close",
                             tint = Color.White
                         )

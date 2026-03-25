@@ -130,6 +130,9 @@ data class ProductInfoResponse(
     val description: String? = null,
     val ingredients: List<String>? = null,
     val insights: String? = null,
+    val pros: List<String>? = null,
+    val cons: List<String>? = null,
+    @SerializedName("calorie_approximations") val calorieApproximations: String? = null,
     val items: List<MealItem>? = null,
 )
 
@@ -161,6 +164,8 @@ data class MealItem(
 data class MealAnalysisResponse(
     val status: String,                       // "analyzed" | "error"
     val product: ProductInfoResponse? = null, // dish name / portion / nutriments
+    @SerializedName("asked_question") val askedQuestion: String? = null,
+    @SerializedName("question_answer") val questionAnswer: String? = null,
     val error: String? = null,
 )
 

@@ -30,6 +30,7 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -39,17 +40,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Circle
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -69,10 +71,8 @@ import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 private const val TAG = "ProductScanner"
@@ -106,7 +106,9 @@ fun ProductScannerScreen(viewModel: ProductScannerViewModel) {
             MealCameraView(
                 onPhotoTaken = viewModel::onPhotoTaken,
                 onBarcodeDetected = viewModel::onBarcodeDetected,
-                onGalleryImagePicked = { uri -> viewModel.onGalleryImagePicked(context, uri) }
+                onGalleryImagePicked = { uri, question ->
+                    viewModel.onGalleryImagePicked(context, uri, question)
+                }
             )
         }
         is ScannerUiState.LoadingBarcode -> LoadingView(message = "Looking up product…", sub = "Barcode: ${state.barcode}")
@@ -118,6 +120,9 @@ fun ProductScannerScreen(viewModel: ProductScannerViewModel) {
         )
         is ScannerUiState.MealFound -> ProductDetailView(
             product = state.product,
+            askedQuestion = state.askedQuestion,
+            questionAnswer = state.questionAnswer,
+            mealImageBytes = state.mealImageBytes,
             label = "Analyse Another Meal",
             onDone = viewModel::resetToScanning
         )
@@ -132,9 +137,9 @@ fun ProductScannerScreen(viewModel: ProductScannerViewModel) {
 
 @Composable
 private fun MealCameraView(
-    onPhotoTaken: (ByteArray) -> Unit,
+    onPhotoTaken: (ByteArray, String?) -> Unit,
     onBarcodeDetected: (String) -> Unit,
-    onGalleryImagePicked: (Uri) -> Unit,
+    onGalleryImagePicked: (Uri, String?) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -183,11 +188,33 @@ private fun MealCameraView(
         }
     }
 
+    var showQuestionDialog by remember { mutableStateOf(false) }
+    var questionText by remember { mutableStateOf("") }
+    var pendingPhotoBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingGalleryUri by remember { mutableStateOf<Uri?>(null) }
+
     // Gallery picker launcher (no READ_EXTERNAL_STORAGE needed)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        uri?.let { onGalleryImagePicked(it) }
+        uri?.let {
+            pendingGalleryUri = it
+            showQuestionDialog = true
+        }
+    }
+
+    fun dispatchAnalysis(question: String?) {
+        val cleanQuestion = question?.trim()?.takeIf { it.isNotEmpty() }
+        pendingPhotoBytes?.let { bytes ->
+            onPhotoTaken(bytes, cleanQuestion)
+        }
+        pendingGalleryUri?.let { uri ->
+            onGalleryImagePicked(uri, cleanQuestion)
+        }
+        pendingPhotoBytes = null
+        pendingGalleryUri = null
+        questionText = ""
+        showQuestionDialog = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -237,7 +264,7 @@ private fun MealCameraView(
                             .background(Color.White.copy(alpha = 0.2f), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Image,
+                            imageVector = Icons.Outlined.Image,
                             contentDescription = "Pick from gallery",
                             tint = Color.White,
                             modifier = Modifier.size(28.dp)
@@ -251,7 +278,10 @@ private fun MealCameraView(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
                         onClick = {
-                            takePhoto(context, imageCaptureUseCase, onPhotoTaken)
+                            takePhoto(context, imageCaptureUseCase) { imageBytes ->
+                                pendingPhotoBytes = imageBytes
+                                showQuestionDialog = true
+                            }
                         },
                         modifier = Modifier
                             .size(72.dp)
@@ -259,7 +289,7 @@ private fun MealCameraView(
                             .border(3.dp, Color.White.copy(alpha = 0.5f), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Circle,
+                            imageVector = Icons.Outlined.Circle,
                             contentDescription = "Capture meal photo",
                             tint = MaterialTheme.colors.primary,
                             modifier = Modifier.size(52.dp)
@@ -282,7 +312,7 @@ private fun MealCameraView(
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.QrCodeScanner,
+                    imageVector = Icons.Outlined.QrCodeScanner,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.8f),
                     modifier = Modifier.size(16.dp)
@@ -294,6 +324,21 @@ private fun MealCameraView(
                     fontSize = 12.sp
                 )
             }
+        }
+
+        if (showQuestionDialog) {
+            AskMealQuestionDialog(
+                question = questionText,
+                onQuestionChange = { questionText = it },
+                onAnalyze = { dispatchAnalysis(questionText) },
+                onSkipQuestion = { dispatchAnalysis(null) },
+                onDismiss = {
+                    pendingPhotoBytes = null
+                    pendingGalleryUri = null
+                    questionText = ""
+                    showQuestionDialog = false
+                }
+            )
         }
     }
 }
@@ -380,6 +425,9 @@ private class BarcodeAnalyzer(
 @Composable
 private fun ProductDetailView(
     product: ProductInfoResponse,
+    askedQuestion: String? = null,
+    questionAnswer: String? = null,
+    mealImageBytes: ByteArray? = null,
     label: String,
     onDone: () -> Unit,
 ) {
@@ -389,6 +437,61 @@ private fun ProductDetailView(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // Display meal image at top if available
+        mealImageBytes?.let { bytes ->
+            val bitmap = remember(bytes) {
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+            bitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "Analyzed meal",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+
+        if (!askedQuestion.isNullOrBlank()) {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = 2.dp,
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Your Question",
+                        style = MaterialTheme.typography.subtitle2,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = askedQuestion,
+                        style = MaterialTheme.typography.body2,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Answer",
+                        style = MaterialTheme.typography.subtitle2,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = questionAnswer ?: "No answer was returned.",
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.onSurface
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Product image (only for barcode results that have an image_url)
         product.imageUrl?.let { url ->
             AsyncImage(
@@ -474,6 +577,54 @@ private fun ProductDetailView(
             )
         }
 
+        // Calorie Approximations
+        product.calorieApproximations?.let { approximations ->
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Walking Approximation", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(approximations, style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
+                }
+            }
+        }
+
+        if (!product.pros.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Ups", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    product.pros.forEach { pro ->
+                        Text("- $pro", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+
+        if (!product.cons.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Downs", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    product.cons.forEach { con ->
+                        Text("- $con", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+
         // Ingredients (barcode only)
         product.ingredientsText?.let { ingredients ->
             Spacer(modifier = Modifier.height(16.dp))
@@ -490,13 +641,60 @@ private fun ProductDetailView(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
         ) {
-            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(imageVector = Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(label)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
+}
+
+@Composable
+private fun AskMealQuestionDialog(
+    question: String,
+    onQuestionChange: (String) -> Unit,
+    onAnalyze: () -> Unit,
+    onSkipQuestion: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ask about this meal") },
+        text = {
+            Column {
+                Text(
+                    text = "Optional: add a question like 'Is this healthy?'",
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = question,
+                    onValueChange = onQuestionChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("e.g. Is this healthy?") },
+                    singleLine = false,
+                    maxLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onAnalyze) {
+                Text("Analyze")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onSkipQuestion) {
+                    Text("Skip Question")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -594,7 +792,7 @@ private fun LoadingView(message: String, sub: String) {
 private fun NotFoundView(barcode: String, onScanAnother: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Icon(imageVector = Icons.Default.SearchOff, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.onSurface.copy(alpha = 0.4f))
+            Icon(imageVector = Icons.Outlined.SearchOff, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.onSurface.copy(alpha = 0.4f))
             Spacer(modifier = Modifier.height(16.dp))
             Text("Product Not Found", style = MaterialTheme.typography.h6)
             Text("Barcode $barcode was not found.", style = MaterialTheme.typography.body2, textAlign = TextAlign.Center, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
@@ -608,7 +806,7 @@ private fun NotFoundView(barcode: String, onScanAnother: () -> Unit) {
 private fun ErrorView(message: String, onRetry: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Icon(imageVector = Icons.Default.ErrorOutline, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.error)
+            Icon(imageVector = Icons.Outlined.ErrorOutline, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.error)
             Spacer(modifier = Modifier.height(16.dp))
             Text("Something went wrong", style = MaterialTheme.typography.h6)
             Text(message, style = MaterialTheme.typography.body2, textAlign = TextAlign.Center, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
@@ -622,7 +820,7 @@ private fun ErrorView(message: String, onRetry: () -> Unit) {
 private fun CameraPermissionNeeded(shouldShowRationale: Boolean, onRequestPermission: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.primary)
+            Icon(imageVector = Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colors.primary)
             Spacer(modifier = Modifier.height(16.dp))
             Text("Camera Permission Required", style = MaterialTheme.typography.h6)
             Spacer(modifier = Modifier.height(8.dp))

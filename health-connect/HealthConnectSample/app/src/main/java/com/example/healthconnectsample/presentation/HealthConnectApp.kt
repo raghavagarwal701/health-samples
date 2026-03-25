@@ -29,10 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,7 +64,7 @@ fun HealthConnectApp(
             bottomBar = {
                 val bottomNavRoutes = listOf(
                     Screen.HomeScreen.route,
-                    Screen.Steps.route,
+                    Screen.ProductScanner.route,
                     Screen.MealsScreen.route,
                     Screen.MoreScreen.route,
                 )
@@ -85,21 +85,21 @@ fun HealthConnectApp(
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                            icon = { Icon(Icons.Outlined.Home, contentDescription = "Home") },
                             label = { Text("Home") },
                             selectedContentColor   = selectedColor,
                             unselectedContentColor = unselectedColor,
                         )
                         BottomNavigationItem(
-                            selected = currentRoute == Screen.Steps.route,
+                            selected = currentRoute == Screen.ProductScanner.route,
                             onClick = {
-                                navController.navigate(Screen.Steps.route) {
+                                navController.navigate(Screen.ProductScanner.route) {
                                     popUpTo(Screen.HomeScreen.route)
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(Icons.Default.DirectionsWalk, contentDescription = "Activity") },
-                            label = { Text("Activity") },
+                            icon = { Icon(Icons.Outlined.CameraAlt, contentDescription = "Scan Product") },
+                            label = { Text("Scan") },
                             selectedContentColor   = selectedColor,
                             unselectedContentColor = unselectedColor,
                         )
@@ -111,7 +111,7 @@ fun HealthConnectApp(
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(Icons.Default.Restaurant, contentDescription = "Meals") },
+                            icon = { Icon(Icons.Outlined.Restaurant, contentDescription = "Meals") },
                             label = { Text("Meals") },
                             selectedContentColor   = selectedColor,
                             unselectedContentColor = unselectedColor,
@@ -124,7 +124,7 @@ fun HealthConnectApp(
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(Icons.Default.MoreHoriz, contentDescription = "More") },
+                            icon = { Icon(Icons.Outlined.MoreHoriz, contentDescription = "More") },
                             label = { Text("More") },
                             selectedContentColor   = selectedColor,
                             unselectedContentColor = unselectedColor,
