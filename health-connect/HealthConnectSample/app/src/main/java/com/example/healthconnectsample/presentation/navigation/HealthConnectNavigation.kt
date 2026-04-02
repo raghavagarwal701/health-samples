@@ -91,7 +91,8 @@ fun HealthConnectNavigation(
     healthConnectManager: HealthConnectManager,
     profileRepository: ProfileRepository,
     scaffoldState: ScaffoldState,
-    startDestination: String = Screen.HomeScreen.route
+    startDestination: String = Screen.HomeScreen.route,
+    onMealsBottomBarVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     NavHost(
@@ -421,7 +422,10 @@ fun HealthConnectNavigation(
             val viewModel: MealsViewModel = viewModel(
                 factory = MealsViewModel.Factory(context.applicationContext as Application)
             )
-            MealsScreen(viewModel = viewModel)
+            MealsScreen(
+                viewModel = viewModel,
+                onBottomBarVisibilityChange = onMealsBottomBarVisibilityChange
+            )
         }
         composable(Screen.MoreScreen.route) {
             MoreScreen(

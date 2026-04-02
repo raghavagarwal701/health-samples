@@ -69,6 +69,41 @@ sealed class MealCameraState {
 
     /** Prompt user to choose between camera/image or text input. */
     object InputMethodChooser : MealCameraState()
+
+    /** FatSecret autocomplete – showing suggestion strings only. */
+    data class FatSecretAutocompleteResults(
+        val query: String,
+        val suggestions: List<String>,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
+        val suppressAutoSearch: Boolean = false,
+    ) : MealCameraState()
+
+    /** FatSecret meal search – showing results. */
+    data class FatSecretSearchResults(
+        val query: String,
+        val autocompleteQuery: String,
+        val foods: List<com.example.healthconnectsample.data.api.FatSecretFood>,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
+    ) : MealCameraState()
+
+    /** FatSecret food detail – showing servings and input for quantity. */
+    data class FatSecretFoodDetail(
+        val food: com.example.healthconnectsample.data.api.FatSecretFood,
+        val selectedServingIndex: Int? = null,
+        val quantity: Double = 1.0,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
+    ) : MealCameraState()
+
+    /** FatSecret meal preview – showing calculated totals before adding. */
+    data class FatSecretMealPreview(
+        val foodName: String,
+        val servingDescription: String,
+        val quantity: Double,
+        val totals: Map<String, Double>?,
+    ) : MealCameraState()
 }
 
 // ─────────────────────────────────────────────
@@ -85,6 +120,12 @@ private const val PREFS_KEY  = "meal_log_v2"
 class MealsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private var fatSecretAutocompleteToken: Long = 0L
+    private var fatSecretSearchToken: Long = 0L
+    private var fatSecretFoodDetailToken: Long = 0L
+    private var lastFatSecretTypedQuery: String = ""
+    private val fatSecretAutocompleteCache = mutableMapOf<String, Pair<List<String>, String?>>()
+    private var lastFatSecretSearchResults: MealCameraState.FatSecretSearchResults? = null
 
     // ── Date ──────────────────────────────────
     // IMPORTANT: these must be declared BEFORE init so loadFromPrefs() can write to them
@@ -264,6 +305,374 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                     MealCameraState.CameraError(e.localizedMessage ?: "Connection error")
             }
         }
+    }
+
+    // ── FatSecret meal search ─────────────────
+
+    fun showFatSecretSearch() {
+        cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+            query = "",
+            suggestions = emptyList(),
+            isLoading = false,
+            errorMessage = null,
+            suppressAutoSearch = false
+        )
+    }
+
+    fun autocompleteFatSecretMeals(query: String) {
+        val trimmedQuery = query.trim()
+        lastFatSecretTypedQuery = trimmedQuery
+
+        if (trimmedQuery.length < 2) {
+            cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                query = trimmedQuery,
+                suggestions = emptyList(),
+                isLoading = false,
+                errorMessage = null,
+                suppressAutoSearch = false
+            )
+            return
+        }
+
+        val cachedResult = fatSecretAutocompleteCache[trimmedQuery]
+        if (cachedResult != null) {
+            cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                query = trimmedQuery,
+                suggestions = cachedResult.first,
+                isLoading = false,
+                errorMessage = cachedResult.second,
+                suppressAutoSearch = false
+            )
+            return
+        }
+
+        val requestToken = ++fatSecretAutocompleteToken
+        val currentState = cameraState.value as? MealCameraState.FatSecretAutocompleteResults
+        cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+            query = trimmedQuery,
+            suggestions = currentState?.suggestions ?: emptyList(),
+            isLoading = true,
+            errorMessage = null,
+            suppressAutoSearch = false
+        )
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.autocompleteFatSecret(
+                    expression = trimmedQuery
+                )
+                if (requestToken != fatSecretAutocompleteToken) return@launch
+
+                val activeState = cameraState.value as? MealCameraState.FatSecretAutocompleteResults
+                if (activeState?.query != trimmedQuery) return@launch
+
+                if (response.isSuccessful) {
+                    val body = response.body()!!
+                    if (body.status == "success") {
+                        if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
+                        fatSecretAutocompleteCache[trimmedQuery] = body.suggestions to null
+                        cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                            query = trimmedQuery,
+                            suggestions = body.suggestions,
+                            isLoading = false,
+                            errorMessage = null,
+                            suppressAutoSearch = false
+                        )
+                    } else {
+                        if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
+                        val error = body.error ?: "No suggestions found"
+                        fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
+                        cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                            query = trimmedQuery,
+                            suggestions = emptyList(),
+                            isLoading = false,
+                            errorMessage = error,
+                            suppressAutoSearch = false
+                        )
+                    }
+                } else {
+                    if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
+                    val error = "Server error: ${response.code()}"
+                    fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
+                    cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                        query = trimmedQuery,
+                        suggestions = emptyList(),
+                        isLoading = false,
+                        errorMessage = error,
+                        suppressAutoSearch = false
+                    )
+                }
+            } catch (e: Exception) {
+                if (requestToken != fatSecretAutocompleteToken) return@launch
+                if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
+                val error = e.localizedMessage ?: "Connection error"
+                fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
+                cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+                    query = trimmedQuery,
+                    suggestions = emptyList(),
+                    isLoading = false,
+                    errorMessage = error,
+                    suppressAutoSearch = false
+                )
+            }
+        }
+    }
+
+    fun searchFatSecretMeals(query: String) {
+        val trimmedQuery = query.trim()
+        val currentState = cameraState.value as? MealCameraState.FatSecretSearchResults
+        val autocompleteQuery = when (val state = cameraState.value) {
+            is MealCameraState.FatSecretAutocompleteResults -> state.query
+            is MealCameraState.FatSecretSearchResults -> state.autocompleteQuery
+            else -> lastFatSecretTypedQuery
+        }.trim()
+
+        if (trimmedQuery.isEmpty()) {
+            cameraState.value = MealCameraState.FatSecretSearchResults(
+                query = "",
+                autocompleteQuery = autocompleteQuery,
+                foods = emptyList(),
+                isLoading = false,
+                errorMessage = null
+            )
+            return
+        }
+
+        val requestToken = ++fatSecretSearchToken
+        cameraState.value = MealCameraState.FatSecretSearchResults(
+            query = trimmedQuery,
+            autocompleteQuery = autocompleteQuery,
+            foods = currentState?.foods ?: emptyList(),
+            isLoading = true,
+            errorMessage = null
+        )
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.searchFatSecret(query = trimmedQuery)
+                if (requestToken != fatSecretSearchToken) return@launch
+
+                if (response.isSuccessful) {
+                    val body = response.body()!!
+                    if (body.status == "success") {
+                        val newState = MealCameraState.FatSecretSearchResults(
+                            query = trimmedQuery,
+                            autocompleteQuery = autocompleteQuery,
+                            foods = body.results,
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                        lastFatSecretSearchResults = newState
+                        cameraState.value = newState
+                    } else {
+                        val newState = MealCameraState.FatSecretSearchResults(
+                            query = trimmedQuery,
+                            autocompleteQuery = autocompleteQuery,
+                            foods = emptyList(),
+                            isLoading = false,
+                            errorMessage = body.error ?: "No results found"
+                        )
+                        lastFatSecretSearchResults = newState
+                        cameraState.value = newState
+                    }
+                } else {
+                    val newState = MealCameraState.FatSecretSearchResults(
+                        query = trimmedQuery,
+                        autocompleteQuery = autocompleteQuery,
+                        foods = emptyList(),
+                        isLoading = false,
+                        errorMessage = "Server error: ${response.code()}"
+                    )
+                    lastFatSecretSearchResults = newState
+                    cameraState.value = newState
+                }
+            } catch (e: Exception) {
+                if (requestToken != fatSecretSearchToken) return@launch
+                val newState = MealCameraState.FatSecretSearchResults(
+                    query = trimmedQuery,
+                    autocompleteQuery = autocompleteQuery,
+                    foods = emptyList(),
+                    isLoading = false,
+                    errorMessage = e.localizedMessage ?: "Connection error"
+                )
+                lastFatSecretSearchResults = newState
+                cameraState.value = newState
+            }
+        }
+    }
+
+    fun backToFatSecretAutocomplete(query: String) {
+        fatSecretAutocompleteToken++
+        val requestedQuery = query.trim()
+        val targetQuery = if (requestedQuery.isNotBlank()) requestedQuery else lastFatSecretTypedQuery
+        val cachedResult = fatSecretAutocompleteCache[targetQuery]
+
+        cameraState.value = MealCameraState.FatSecretAutocompleteResults(
+            query = targetQuery,
+            suggestions = cachedResult?.first ?: emptyList(),
+            isLoading = false,
+            errorMessage = cachedResult?.second,
+            suppressAutoSearch = true
+        )
+    }
+
+    fun selectFatSecretFood(food: com.example.healthconnectsample.data.api.FatSecretFood) {
+        lastFatSecretSearchResults = cameraState.value as? MealCameraState.FatSecretSearchResults
+        val requestToken = ++fatSecretFoodDetailToken
+        cameraState.value = MealCameraState.FatSecretFoodDetail(
+            food = food,
+            selectedServingIndex = defaultServingIndex(food),
+            quantity = 1.0,
+            isLoading = true,
+            errorMessage = null
+        )
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.getFatSecretFood(food.foodId)
+                if (requestToken != fatSecretFoodDetailToken) return@launch
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val detailedFood = body?.food
+                    if (body?.status == "success" && detailedFood != null) {
+                        cameraState.value = MealCameraState.FatSecretFoodDetail(
+                            food = detailedFood,
+                            selectedServingIndex = defaultServingIndex(detailedFood),
+                            quantity = 1.0,
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                    } else {
+                        val error = body?.error ?: "Could not load food details"
+                        cameraState.value = MealCameraState.FatSecretFoodDetail(
+                            food = food,
+                            selectedServingIndex = defaultServingIndex(food),
+                            quantity = 1.0,
+                            isLoading = false,
+                            errorMessage = error
+                        )
+                    }
+                } else {
+                    cameraState.value = MealCameraState.FatSecretFoodDetail(
+                        food = food,
+                        selectedServingIndex = defaultServingIndex(food),
+                        quantity = 1.0,
+                        isLoading = false,
+                        errorMessage = "Server error: ${response.code()}"
+                    )
+                }
+            } catch (e: Exception) {
+                if (requestToken != fatSecretFoodDetailToken) return@launch
+                cameraState.value = MealCameraState.FatSecretFoodDetail(
+                    food = food,
+                    selectedServingIndex = defaultServingIndex(food),
+                    quantity = 1.0,
+                    isLoading = false,
+                    errorMessage = e.localizedMessage ?: "Connection error"
+                )
+            }
+        }
+    }
+
+    fun updateFatSecretServingSelection(servingIndex: Int, quantity: Double) {
+        val currentState = cameraState.value
+        if (currentState is MealCameraState.FatSecretFoodDetail) {
+            cameraState.value = currentState.copy(
+                selectedServingIndex = servingIndex,
+                quantity = quantity
+            )
+        }
+    }
+
+    fun confirmFatSecretMeal() {
+        val currentState = cameraState.value
+        if (currentState !is MealCameraState.FatSecretFoodDetail) return
+        val selectedServing = currentState.food.servings.getOrNull(currentState.selectedServingIndex ?: -1)
+        if (selectedServing == null) {
+            cameraState.value = MealCameraState.CameraError("Please select a serving size")
+            return
+        }
+
+        cameraState.value = MealCameraState.Analyzing
+        viewModelScope.launch {
+            try {
+                val request = com.example.healthconnectsample.data.api.FatSecretMealAddRequest(
+                    foodId = currentState.food.foodId,
+                    servingDescription = selectedServing.servingDescription,
+                    quantity = currentState.quantity
+                )
+                val response = RetrofitClient.apiService.previewFatSecretMeal(request)
+                if (response.isSuccessful) {
+                    val body = response.body()!!
+                    if (body.status == "success") {
+                        cameraState.value = MealCameraState.FatSecretMealPreview(
+                            foodName = body.foodName ?: currentState.food.foodName,
+                            servingDescription = body.servingDescription ?: "1 serving",
+                            quantity = body.quantity ?: currentState.quantity,
+                            totals = body.totals
+                        )
+                    } else {
+                        cameraState.value = MealCameraState.CameraError(
+                            body.error ?: "Could not calculate meal nutrition"
+                        )
+                    }
+                } else {
+                    cameraState.value = MealCameraState.CameraError("Server error: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                cameraState.value =
+                    MealCameraState.CameraError(e.localizedMessage ?: "Connection error")
+            }
+        }
+    }
+
+    fun addFatSecretMeal(preview: MealCameraState.FatSecretMealPreview) {
+        // Convert FatSecret meal to ProductInfoResponse format for consistent storage
+        val product = ProductInfoResponse(
+            barcode = "fatsecret_${System.currentTimeMillis()}",
+            productName = preview.foodName,
+            brands = null,
+            categories = null,
+            nutriscoreGrade = null,
+            nutriments = preview.totals?.let { totals ->
+                ProductNutrimentsResponse(
+                    energyKcal100g = totals["calories"],
+                    carbohydrates100g = totals["carbohydrate"],
+                    proteins100g = totals["protein"],
+                    fat100g = totals["fat"],
+                    fiber100g = totals["fiber"],
+                    salt100g = totals["sodium"]?.let { it / 1000 }, // Convert mg to g
+                    sugars100g = totals["sugar"]
+                )
+            },
+            description = "Serving: ${preview.servingDescription} (x${preview.quantity})"
+        )
+        addMeal(selectedDate.value, product, null)
+        cameraState.value = MealCameraState.LogView
+    }
+
+    fun closeFatSecretSearch() {
+        fatSecretFoodDetailToken++
+        cameraState.value = MealCameraState.LogView
+    }
+
+    fun backFromFatSecretFoodDetail() {
+        fatSecretFoodDetailToken++
+        val searchState = lastFatSecretSearchResults
+        cameraState.value = if (searchState != null) {
+            searchState.copy(isLoading = false)
+        } else {
+            MealCameraState.LogView
+        }
+    }
+
+    private fun defaultServingIndex(food: com.example.healthconnectsample.data.api.FatSecretFood): Int? {
+        if (food.servings.isEmpty()) return null
+        val defaultIndex = food.servings.indexOfFirst { it.isDefault == 1 }
+        if (defaultIndex >= 0) return defaultIndex
+        val derivedServingIndex = food.servings.indexOfFirst { it.servingId == 0 }
+        return if (derivedServingIndex >= 0) derivedServingIndex else 0
     }
 
     // ── Meal log management ───────────────────

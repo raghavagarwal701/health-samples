@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     // Default: ngrok forwarding URL
-    private const val DEFAULT_BASE_URL = "https://f2c7-203-110-242-32.ngrok-free.app/"
+    private const val DEFAULT_BASE_URL = "https://57a5-203-110-247-86.ngrok-free.app/"
 
     private var baseUrl: String = DEFAULT_BASE_URL
 

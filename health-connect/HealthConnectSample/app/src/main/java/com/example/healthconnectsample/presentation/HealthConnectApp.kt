@@ -35,7 +35,11 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.healthconnectsample.data.HealthConnectManager
@@ -58,6 +62,13 @@ fun HealthConnectApp(
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
+        var isBottomBarVisible by remember { mutableStateOf(true) }
+
+        LaunchedEffect(currentRoute) {
+            if (currentRoute != Screen.MealsScreen.route) {
+                isBottomBarVisible = true
+            }
+        }
 
         Scaffold(
             scaffoldState = scaffoldState,
@@ -69,7 +80,7 @@ fun HealthConnectApp(
                     Screen.MoreScreen.route,
                 )
                 // Only show bottom bar on the four main screens
-                if (currentRoute in bottomNavRoutes) {
+                if (currentRoute in bottomNavRoutes && isBottomBarVisible) {
                     BottomNavigation(
                         backgroundColor = Color(0xFF0A0A0A),
                         contentColor    = Color(0xFF3DDB85),
@@ -142,7 +153,10 @@ fun HealthConnectApp(
                     profileRepository = profileRepository,
                     navController = navController,
                     scaffoldState = scaffoldState,
-                    startDestination = initialRoute
+                    startDestination = initialRoute,
+                    onMealsBottomBarVisibilityChange = { isVisible ->
+                        isBottomBarVisible = isVisible
+                    }
                 )
             }
         }

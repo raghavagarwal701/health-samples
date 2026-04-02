@@ -172,3 +172,113 @@ data class MealAnalysisResponse(
 data class MealTextRequest(
     val description: String,                  // plain-text description of what the user ate
 )
+
+// ===== FatSecret Integration Models =====
+
+data class FatSecretServing(
+    @SerializedName("serving_id") val servingId: Int? = null,
+    @SerializedName("serving_description") val servingDescription: String,
+    @SerializedName("serving_url") val servingUrl: String? = null,
+    @SerializedName("metric_serving_amount") val metricServingAmount: Double? = null,
+    @SerializedName("metric_serving_unit") val metricServingUnit: String? = null,
+    @SerializedName("number_of_units") val numberOfUnits: Double? = null,
+    @SerializedName("measurement_description") val measurementDescription: String? = null,
+    val calories: Double? = null,
+    val carbohydrate: Double? = null,
+    val protein: Double? = null,
+    val fat: Double? = null,
+    @SerializedName("saturated_fat") val saturatedFat: Double? = null,
+    @SerializedName("polyunsaturated_fat") val polyunsaturatedFat: Double? = null,
+    @SerializedName("monounsaturated_fat") val monounsaturatedFat: Double? = null,
+    val cholesterol: Double? = null,
+    val sodium: Double? = null,
+    val potassium: Double? = null,
+    val fiber: Double? = null,
+    val sugar: Double? = null,
+    @SerializedName("vitamin_a") val vitaminA: Double? = null,
+    @SerializedName("vitamin_c") val vitaminC: Double? = null,
+    val calcium: Double? = null,
+    val iron: Double? = null,
+    @SerializedName("is_default") val isDefault: Int? = null,
+    @SerializedName("trans_fat") val transFat: Double? = null,
+    @SerializedName("added_sugars") val addedSugars: Double? = null,
+    @SerializedName("vitamin_d") val vitaminD: Double? = null,
+)
+
+data class FatSecretFoodImage(
+    @SerializedName("image_url") val imageUrl: String? = null,
+    @SerializedName("image_type") val imageType: String? = null,
+)
+
+data class FatSecretFoodImages(
+    @SerializedName("food_image") val foodImage: List<FatSecretFoodImage> = emptyList(),
+)
+
+data class FatSecretFoodSubCategories(
+    @SerializedName("food_sub_category") val foodSubCategory: List<String> = emptyList(),
+)
+
+data class FatSecretAttributeItem(
+    val id: Long? = null,
+    val name: String? = null,
+    val value: Int? = null,
+)
+
+data class FatSecretAllergens(
+    val allergen: List<FatSecretAttributeItem> = emptyList(),
+)
+
+data class FatSecretPreferences(
+    val preference: List<FatSecretAttributeItem> = emptyList(),
+)
+
+data class FatSecretFood(
+    @SerializedName("food_id") val foodId: Int,
+    @SerializedName("food_name") val foodName: String,
+    @SerializedName("brand_name") val brandName: String? = null,
+    @SerializedName("food_type") val foodType: String? = null,
+    @SerializedName("food_url") val foodUrl: String? = null,
+    @SerializedName("food_sub_categories") val foodSubCategories: FatSecretFoodSubCategories? = null,
+    @SerializedName("food_images") val foodImages: FatSecretFoodImages? = null,
+    val allergens: FatSecretAllergens? = null,
+    val preferences: FatSecretPreferences? = null,
+    val servings: List<FatSecretServing> = emptyList(),
+)
+
+data class FatSecretAutocompleteResponse(
+    val status: String,
+    val suggestions: List<String> = emptyList(),
+    val error: String? = null,
+)
+
+data class FatSecretSearchResponse(
+    val status: String,
+    val query: String? = null,
+    @SerializedName("page_number") val pageNumber: Int? = null,
+    @SerializedName("max_results") val maxResults: Int? = null,
+    @SerializedName("total_results") val totalResults: Int? = null,
+    val results: List<FatSecretFood> = emptyList(),
+    val error: String? = null,
+)
+
+data class FatSecretFoodResponse(
+    val status: String,
+    val food: FatSecretFood? = null,
+    val error: String? = null,
+)
+
+data class FatSecretMealAddPreviewResponse(
+    val status: String,
+    @SerializedName("food_id") val foodId: Int? = null,
+    @SerializedName("food_name") val foodName: String? = null,
+    @SerializedName("serving_description") val servingDescription: String? = null,
+    val quantity: Double? = null,
+    val totals: Map<String, Double>? = null,
+    val error: String? = null,
+)
+
+data class FatSecretMealAddRequest(
+    @SerializedName("food_id") val foodId: Int,
+    @SerializedName("serving_description") val servingDescription: String,
+    val quantity: Double = 1.0,
+)

@@ -21,6 +21,7 @@ import android.net.Uri
 import android.util.Log
 import android.util.Size
 import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -98,11 +99,21 @@ private const val MEALS_TAG = "MealsScreen"
 
 @kotlin.OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun MealsScreen(viewModel: MealsViewModel) {
+fun MealsScreen(
+    viewModel: MealsViewModel,
+    onBottomBarVisibilityChange: (Boolean) -> Unit = {}
+) {
     val cameraState by viewModel.cameraState
     val selectedDate by viewModel.selectedDate
 
     val context = LocalContext.current
+    LaunchedEffect(cameraState) {
+        onBottomBarVisibilityChange(cameraState !is MealCameraState.FatSecretFoodDetail)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onBottomBarVisibilityChange(true) }
+    }
+
     when (cameraState) {
         is MealCameraState.LogView -> {
             MealLogView(viewModel = viewModel, selectedDate = selectedDate)
@@ -159,6 +170,59 @@ fun MealsScreen(viewModel: MealsViewModel) {
         is MealCameraState.CameraError -> {
             val msg = (cameraState as MealCameraState.CameraError).message
             MealErrorView(message = msg, onRetry = viewModel::openCamera, onClose = viewModel::closeCamera)
+        }
+        is MealCameraState.FatSecretAutocompleteResults -> {
+            val state = cameraState as MealCameraState.FatSecretAutocompleteResults
+            MealFatSecretAutocompleteResults(
+                query = state.query,
+                suggestions = state.suggestions,
+                isLoading = state.isLoading,
+                errorMessage = state.errorMessage,
+                suppressAutoSearch = state.suppressAutoSearch,
+                onAutocomplete = { query -> viewModel.autocompleteFatSecretMeals(query) },
+                onSelectSuggestion = { suggestion -> viewModel.searchFatSecretMeals(suggestion) },
+                onClose = { viewModel.closeFatSecretSearch() }
+            )
+        }
+        is MealCameraState.FatSecretSearchResults -> {
+            val state = cameraState as MealCameraState.FatSecretSearchResults
+            BackHandler {
+                viewModel.backToFatSecretAutocomplete(state.autocompleteQuery)
+            }
+            MealFatSecretSearchResults(
+                query = state.query,
+                foods = state.foods,
+                isLoading = state.isLoading,
+                errorMessage = state.errorMessage,
+                onSelectFood = { food -> viewModel.selectFatSecretFood(food) },
+                onBack = { viewModel.backToFatSecretAutocomplete(state.autocompleteQuery) },
+                onClose = { viewModel.closeFatSecretSearch() }
+            )
+        }
+        is MealCameraState.FatSecretFoodDetail -> {
+            val state = cameraState as MealCameraState.FatSecretFoodDetail
+            MealFatSecretFoodDetail(
+                food = state.food,
+                selectedServingId = state.selectedServingIndex ?: -1,
+                quantity = state.quantity,
+                isLoading = state.isLoading,
+                errorMessage = state.errorMessage,
+                onServingChange = { servingId, qty -> viewModel.updateFatSecretServingSelection(servingId, qty) },
+                onConfirm = { viewModel.confirmFatSecretMeal() },
+                onClose = { viewModel.backFromFatSecretFoodDetail() }
+            )
+        }
+        is MealCameraState.FatSecretMealPreview -> {
+            val state = cameraState as MealCameraState.FatSecretMealPreview
+            MealFatSecretMealPreview(
+                foodName = state.foodName,
+                servingDescription = state.servingDescription,
+                quantity = state.quantity,
+                totals = state.totals,
+                onConfirm = { viewModel.addFatSecretMeal(state) },
+                onRetry = { viewModel.showFatSecretSearch() },
+                onClose = { viewModel.closeFatSecretSearch() }
+            )
         }
     }
 }
@@ -295,6 +359,45 @@ private fun MealInputMethodChooser(
                         )
                         Text(
                             text = "Type what you ate and AI will estimate nutrients",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+            // FatSecret meal search option
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                elevation = 4.dp,
+                onClick = { viewModel.showFatSecretSearch() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(Color(0xFFFF6B6B).copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Restaurant,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Search FatSecret",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Search database for specific foods",
                             style = MaterialTheme.typography.caption,
                             color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                         )

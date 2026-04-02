@@ -62,4 +62,45 @@ interface PulseApiService {
     suspend fun analyzeMealFromText(
         @Body request: MealTextRequest,
     ): Response<MealAnalysisResponse>
+
+    // ===== FatSecret Integration =====
+
+    /**
+     * Get autocomplete suggestions for food search.
+     * GET /api/fatsecret/autocomplete?expression=...&max_results=...
+     */
+    @GET("api/fatsecret/autocomplete")
+    suspend fun autocompleteFatSecret(
+        @retrofit2.http.Query("expression") expression: String,
+        @retrofit2.http.Query("max_results") maxResults: Int = 10,
+    ): Response<FatSecretAutocompleteResponse>
+
+    /**
+     * Search for foods by name with pagination.
+     * GET /api/fatsecret/search?query=...&page_number=...&max_results=...
+     */
+    @GET("api/fatsecret/search")
+    suspend fun searchFatSecret(
+        @retrofit2.http.Query("query") query: String,
+        @retrofit2.http.Query("page_number") pageNumber: Int = 0,
+        @retrofit2.http.Query("max_results") maxResults: Int = 20,
+    ): Response<FatSecretSearchResponse>
+
+    /**
+     * Get detailed food information with all serving options.
+     * GET /api/fatsecret/food/{food_id}
+     */
+    @GET("api/fatsecret/food/{food_id}")
+    suspend fun getFatSecretFood(
+        @Path("food_id") foodId: Int,
+    ): Response<FatSecretFoodResponse>
+
+    /**
+     * Calculate meal totals based on food + serving + quantity.
+     * POST /api/fatsecret/add-preview
+     */
+    @POST("api/fatsecret/add-preview")
+    suspend fun previewFatSecretMeal(
+        @Body request: FatSecretMealAddRequest,
+    ): Response<FatSecretMealAddPreviewResponse>
 }
