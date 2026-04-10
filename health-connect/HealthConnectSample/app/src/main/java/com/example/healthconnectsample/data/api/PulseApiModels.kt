@@ -80,44 +80,63 @@ data class ChatMealEntryPayload(
     val micronutrients: Map<String, Double>? = null,
 )
 
-data class TodayActivityContextPayload(
+data class ExerciseSessionPayload(
+    val title: String? = null,
+    @SerializedName("exercise_type") val exerciseType: Int? = null,
+    @SerializedName("start_time") val startTime: String? = null,
+    @SerializedName("end_time") val endTime: String? = null,
+    @SerializedName("duration_minutes") val durationMinutes: Long? = null,
+)
+
+data class MealActivityDetailPayload(
     val steps: Long? = null,
-    @SerializedName("workout_minutes") val workoutMinutes: Double? = null,
+    @SerializedName("distance_km") val distanceKm: Double? = null,
     @SerializedName("calories_burned") val caloriesBurned: Double? = null,
+    @SerializedName("workout_minutes") val workoutMinutes: Double? = null,
+    @SerializedName("exercise_sessions") val exerciseSessions: List<ExerciseSessionPayload> = emptyList(),
 )
 
-data class TodayChatContextPayload(
+data class DayMealActivityPayload(
+    val date: String,
     val meals: List<ChatMealEntryPayload> = emptyList(),
-    val calories: Double? = null,
-    val macros: MacroTotalsPayload? = null,
-    val activity: TodayActivityContextPayload? = null,
+    val activity: MealActivityDetailPayload? = null,
 )
 
-data class DailyNutrientTotalPayload(
-    val date: String? = null,
-    val calories: Double? = null,
-    val macros: MacroTotalsPayload? = null,
-    @SerializedName("meals_summary") val mealsSummary: String? = null,
-    val micronutrients: Map<String, Double>? = null,
-)
-
-data class LastFewDaysContextPayload(
-    @SerializedName("daily_totals") val dailyTotals: List<DailyNutrientTotalPayload> = emptyList(),
-)
-
-data class TrendSummaryPayload(
-    val calories: String? = null,
-    val protein: String? = null,
-    val carbs: String? = null,
-    val fat: String? = null,
-    val micronutrients: Map<String, String>? = null,
-)
-
-data class SevenDaySummaryContextPayload(
-    @SerializedName("avg_calories") val avgCalories: Double? = null,
+data class SevenDayNutritionSummaryPayload(
+    @SerializedName("avg_energy_consumed_kcal") val avgEnergyConsumedKcal: Double? = null,
+    @SerializedName("avg_energy_expended_kcal") val avgEnergyExpendedKcal: Double? = null,
     @SerializedName("avg_macros") val avgMacros: MacroTotalsPayload? = null,
-    @SerializedName("micronutrient_averages") val micronutrientAverages: Map<String, Double>? = null,
-    val trends: TrendSummaryPayload? = null,
+    @SerializedName("avg_micronutrients") val avgMicronutrients: Map<String, Double>? = null,
+)
+
+data class SleepStagePayload(
+    val stage: Int,
+    @SerializedName("start_time") val startTime: String,
+    @SerializedName("end_time") val endTime: String,
+)
+
+data class SleepSessionPayload(
+    val uid: String,
+    val title: String? = null,
+    val notes: String? = null,
+    @SerializedName("start_time") val startTime: String,
+    @SerializedName("end_time") val endTime: String,
+    @SerializedName("duration_minutes") val durationMinutes: Long? = null,
+    val stages: List<SleepStagePayload> = emptyList(),
+)
+
+data class DailySleepHistoryPayload(
+    val date: String,
+    @SerializedName("sleep_sessions") val sleepSessions: List<SleepSessionPayload> = emptyList(),
+)
+
+data class DailyActivityHistoryPayload(
+    val date: String,
+    val steps: Long? = null,
+    @SerializedName("distance_km") val distanceKm: Double? = null,
+    @SerializedName("calories_burned") val caloriesBurned: Double? = null,
+    @SerializedName("workout_minutes") val workoutMinutes: Double? = null,
+    @SerializedName("exercise_sessions") val exerciseSessions: List<ExerciseSessionPayload> = emptyList(),
 )
 
 data class ChatUserProfilePayload(
@@ -128,9 +147,10 @@ data class ChatUserProfilePayload(
 )
 
 data class ChatContextPayload(
-    val today: TodayChatContextPayload,
-    @SerializedName("last_3_4_days") val last34Days: LastFewDaysContextPayload,
-    @SerializedName("last_7_days_summary") val last7DaysSummary: SevenDaySummaryContextPayload,
+    @SerializedName("last_two_days_meal_activity") val lastTwoDaysMealActivity: List<DayMealActivityPayload> = emptyList(),
+    @SerializedName("seven_day_nutrition_summary") val sevenDayNutritionSummary: SevenDayNutritionSummaryPayload,
+    @SerializedName("seven_day_activity_history") val sevenDayActivityHistory: List<DailyActivityHistoryPayload> = emptyList(),
+    @SerializedName("seven_day_sleep_history") val sevenDaySleepHistory: List<DailySleepHistoryPayload> = emptyList(),
     @SerializedName("user_profile") val userProfile: ChatUserProfilePayload? = null,
 )
 

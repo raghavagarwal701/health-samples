@@ -12,14 +12,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.healthconnectsample.data.HealthConnectManager
+import com.example.healthconnectsample.data.SleepSessionData
 import com.example.healthconnectsample.data.ProfileData
 import com.example.healthconnectsample.data.ProfileRepository
 import com.example.healthconnectsample.data.api.*
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 data class ChatMessage(
     val role: String,   // "user" or "assistant"
@@ -155,6 +158,14 @@ class ChatViewModel(
         val micronutrients: Map<String, Double>,
     )
 
+    private data class ActivityDayContext(
+        val steps: Long?,
+        val distanceKm: Double?,
+        val caloriesBurned: Double?,
+        val workoutMinutes: Double?,
+        val exerciseSessions: List<ExerciseSessionPayload>,
+    )
+
     private fun parseMealLogByDate(): Map<LocalDate, MealDayContext> {
         val raw = mealLogPrefs.getString("meal_log_v2", null) ?: return emptyMap()
         return try {
@@ -258,6 +269,71 @@ class ChatViewModel(
         }
     }
 
+    private fun ExerciseSessionRecord.toChatPayload(): ExerciseSessionPayload {
+        return ExerciseSessionPayload(
+            title = title,
+            exerciseType = exerciseType,
+            startTime = startTime.toString(),
+            endTime = endTime.toString(),
+            durationMinutes = Duration.between(startTime, endTime).toMinutes(),
+        )
+    }
+
+    private fun SleepSessionData.toChatPayload(): SleepSessionPayload {
+        return SleepSessionPayload(
+            uid = uid,
+            title = title,
+            notes = notes,
+            startTime = startTime.toString(),
+            endTime = endTime.toString(),
+            durationMinutes = duration?.toMinutes(),
+            stages = stages.map { stage ->
+                SleepStagePayload(
+                    stage = stage.stage,
+                    startTime = stage.startTime.toString(),
+                    endTime = stage.endTime.toString(),
+                )
+            },
+        )
+    }
+
+    private suspend fun buildActivityDayContext(
+        date: LocalDate,
+        zoneId: ZoneId,
+        now: Instant,
+    ): ActivityDayContext {
+        val dayStart = date.atStartOfDay(zoneId).toInstant()
+        val dayEnd = if (date == LocalDate.now(zoneId)) now else dayStart.plus(1, ChronoUnit.DAYS)
+
+        val steps = runCatching { healthConnectManager.readStepsAggregate(dayStart, dayEnd) }.getOrNull()
+        val distanceKm = runCatching { healthConnectManager.readDistanceAggregate(dayStart, dayEnd)?.inKilometers }.getOrNull()
+        val caloriesBurned = runCatching { healthConnectManager.readCaloriesAggregate(dayStart, dayEnd)?.inKilocalories }.getOrNull()
+        val exerciseSessions = runCatching { healthConnectManager.readExerciseSessions(dayStart, dayEnd) }
+            .getOrDefault(emptyList())
+            .map { it.toChatPayload() }
+        val workoutMinutes = exerciseSessions.sumOf { it.durationMinutes ?: 0L }.toDouble()
+
+        return ActivityDayContext(
+            steps = steps,
+            distanceKm = distanceKm,
+            caloriesBurned = caloriesBurned,
+            workoutMinutes = workoutMinutes,
+            exerciseSessions = exerciseSessions,
+        )
+    }
+
+    private fun buildMealDayContext(
+        date: LocalDate,
+        mealLogByDate: Map<LocalDate, MealDayContext>,
+    ): DayMealActivityPayload {
+        val day = mealLogByDate[date]
+        return DayMealActivityPayload(
+            date = date.toString(),
+            meals = day?.meals ?: emptyList(),
+            activity = null,
+        )
+    }
+
     private suspend fun buildChatContext(
         profile: ProfileData,
         healthData: HealthDataPayload,
@@ -267,37 +343,26 @@ class ChatViewModel(
         val now = Instant.now()
 
         val mealLogByDate = parseMealLogByDate()
-        val todayMeals = mealLogByDate[today]
 
-        val todayStart = today.atStartOfDay(zoneId).toInstant()
-        val todaySteps = runCatching { healthConnectManager.readStepsAggregate(todayStart, now) }.getOrNull()
-        val todayCaloriesBurned = runCatching {
-            healthConnectManager.readCaloriesAggregate(todayStart, now)?.inKilocalories
-        }.getOrNull()
-        val todayWorkoutMinutes = runCatching {
-            healthConnectManager.readExerciseSessions(todayStart, now)
-                .sumOf { Duration.between(it.startTime, it.endTime).toMinutes() }
-                .toDouble()
-        }.getOrNull()
+        val lastTwoDaysMealActivity = listOf(today, today.minusDays(1)).map { date ->
+            val activity = buildActivityDayContext(date, zoneId, now)
+            val dayMeals = mealLogByDate[date]
 
-        val recentDates = (1..4).map { today.minusDays(it.toLong()) }
-        val last34DailyTotals = recentDates.map { date ->
-            val day = mealLogByDate[date]
-            DailyNutrientTotalPayload(
+            DayMealActivityPayload(
                 date = date.toString(),
-                calories = day?.calories ?: 0.0,
-                macros = MacroTotalsPayload(
-                    proteinG = day?.proteinG ?: 0.0,
-                    carbsG = day?.carbsG ?: 0.0,
-                    fatG = day?.fatG ?: 0.0,
+                meals = dayMeals?.meals ?: emptyList(),
+                activity = MealActivityDetailPayload(
+                    steps = activity.steps,
+                    distanceKm = activity.distanceKm,
+                    caloriesBurned = activity.caloriesBurned,
+                    workoutMinutes = activity.workoutMinutes,
+                    exerciseSessions = activity.exerciseSessions,
                 ),
-                mealsSummary = day?.meals?.joinToString(separator = ", ") { it.name }?.takeIf { it.isNotBlank() },
-                micronutrients = day?.micronutrients,
             )
         }
 
         val sevenDayDates = (0..6).map { today.minusDays(it.toLong()) }
-        val sevenDayData = sevenDayDates.map { date ->
+        val sevenDayMealData = sevenDayDates.map { date ->
             mealLogByDate[date] ?: MealDayContext(
                 meals = emptyList(),
                 calories = 0.0,
@@ -308,78 +373,61 @@ class ChatViewModel(
             )
         }
 
+        val sevenDayActivityHistory = sevenDayDates.map { date ->
+            val activity = buildActivityDayContext(date, zoneId, now)
+            DailyActivityHistoryPayload(
+                date = date.toString(),
+                steps = activity.steps,
+                distanceKm = activity.distanceKm,
+                caloriesBurned = activity.caloriesBurned,
+                workoutMinutes = activity.workoutMinutes,
+                exerciseSessions = activity.exerciseSessions,
+            )
+        }
+
+        val sleepHistory = runCatching { healthConnectManager.readSleepSessions() }
+            .getOrDefault(emptyList())
+            .groupBy { it.endTime.atZone(zoneId).toLocalDate() }
+            .toSortedMap(compareByDescending { it })
+            .map { (date, sessions) ->
+                DailySleepHistoryPayload(
+                    date = date.toString(),
+                    sleepSessions = sessions.map { it.toChatPayload() },
+                )
+            }
+
         fun avg(values: List<Double>) = if (values.isEmpty()) 0.0 else values.average()
 
-        val avgCalories = avg(sevenDayData.map { it.calories })
-        val avgProtein = avg(sevenDayData.map { it.proteinG })
-        val avgCarbs = avg(sevenDayData.map { it.carbsG })
-        val avgFat = avg(sevenDayData.map { it.fatG })
-        val avgFiber = avg(sevenDayData.map { it.micronutrients["fiber_g"] ?: 0.0 })
-        val avgSugar = avg(sevenDayData.map { it.micronutrients["sugar_g"] ?: 0.0 })
-        val avgSodium = avg(sevenDayData.map { it.micronutrients["sodium_mg"] ?: 0.0 })
-
-        val olderWindow = sevenDayData.takeLast(3)
-        val newerWindow = sevenDayData.take(3)
-
-        val avgOlderCalories = avg(olderWindow.map { it.calories })
-        val avgOlderProtein = avg(olderWindow.map { it.proteinG })
-        val avgOlderCarbs = avg(olderWindow.map { it.carbsG })
-        val avgOlderFat = avg(olderWindow.map { it.fatG })
-        val avgNewerCalories = avg(newerWindow.map { it.calories })
-        val avgNewerProtein = avg(newerWindow.map { it.proteinG })
-        val avgNewerCarbs = avg(newerWindow.map { it.carbsG })
-        val avgNewerFat = avg(newerWindow.map { it.fatG })
+        val avgEnergyConsumed = avg(sevenDayMealData.map { it.calories })
+        val avgEnergyExpended = avg(sevenDayActivityHistory.map { it.caloriesBurned ?: 0.0 })
+        val avgProtein = avg(sevenDayMealData.map { it.proteinG })
+        val avgCarbs = avg(sevenDayMealData.map { it.carbsG })
+        val avgFat = avg(sevenDayMealData.map { it.fatG })
+        val avgFiber = avg(sevenDayMealData.map { it.micronutrients["fiber_g"] ?: 0.0 })
+        val avgSugar = avg(sevenDayMealData.map { it.micronutrients["sugar_g"] ?: 0.0 })
+        val avgSodium = avg(sevenDayMealData.map { it.micronutrients["sodium_mg"] ?: 0.0 })
 
         val averageSteps = (healthData.activitySummary?.dailyAverages?.get("steps") as? Number)?.toDouble()
-            ?: (todaySteps?.toDouble() ?: 0.0)
+            ?: avg(sevenDayActivityHistory.map { it.steps?.toDouble() ?: 0.0 })
 
         return ChatContextPayload(
-            today = TodayChatContextPayload(
-                meals = todayMeals?.meals ?: emptyList(),
-                calories = todayMeals?.calories ?: 0.0,
-                macros = MacroTotalsPayload(
-                    proteinG = todayMeals?.proteinG ?: 0.0,
-                    carbsG = todayMeals?.carbsG ?: 0.0,
-                    fatG = todayMeals?.fatG ?: 0.0,
-                ),
-                activity = TodayActivityContextPayload(
-                    steps = todaySteps,
-                    workoutMinutes = todayWorkoutMinutes,
-                    caloriesBurned = todayCaloriesBurned,
-                ),
-            ),
-            last34Days = LastFewDaysContextPayload(
-                dailyTotals = last34DailyTotals,
-            ),
-            last7DaysSummary = SevenDaySummaryContextPayload(
-                avgCalories = avgCalories,
+            lastTwoDaysMealActivity = lastTwoDaysMealActivity,
+            sevenDayNutritionSummary = SevenDayNutritionSummaryPayload(
+                avgEnergyConsumedKcal = avgEnergyConsumed,
+                avgEnergyExpendedKcal = avgEnergyExpended,
                 avgMacros = MacroTotalsPayload(
                     proteinG = avgProtein,
                     carbsG = avgCarbs,
                     fatG = avgFat,
                 ),
-                micronutrientAverages = mapOf(
+                avgMicronutrients = mapOf(
                     "fiber_g" to avgFiber,
                     "sugar_g" to avgSugar,
                     "sodium_mg" to avgSodium,
                 ),
-                trends = TrendSummaryPayload(
-                    calories = trendDirection(avgOlderCalories, avgNewerCalories),
-                    protein = trendDirection(avgOlderProtein, avgNewerProtein),
-                    carbs = trendDirection(avgOlderCarbs, avgNewerCarbs),
-                    fat = trendDirection(avgOlderFat, avgNewerFat),
-                    micronutrients = mapOf(
-                        "fiber_g" to trendDirection(
-                            avg(olderWindow.map { it.micronutrients["fiber_g"] ?: 0.0 }),
-                            avg(newerWindow.map { it.micronutrients["fiber_g"] ?: 0.0 })
-                        ),
-                        "sodium_mg" to trendDirection(
-                            avg(olderWindow.map { it.micronutrients["sodium_mg"] ?: 0.0 }),
-                            avg(newerWindow.map { it.micronutrients["sodium_mg"] ?: 0.0 })
-                        )
-                    ),
-                ),
             ),
+            sevenDayActivityHistory = sevenDayActivityHistory,
+            sevenDaySleepHistory = sleepHistory,
             userProfile = ChatUserProfilePayload(
                 weightKg = profile.weight.toDoubleOrNull(),
                 heightCm = profile.height.toDoubleOrNull()?.let { if (profile.heightUnit == "ft") it * 30.48 else it },
