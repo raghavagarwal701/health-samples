@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.Person
@@ -58,7 +59,7 @@ private val moreItems = listOf(
     MoreItem(Screen.ExerciseSessions, Icons.AutoMirrored.Outlined.DirectionsRun),
     MoreItem(Screen.SleepSessions, Icons.Outlined.Hotel),
     MoreItem(Screen.HeartRate, Icons.Outlined.Favorite),
-    MoreItem(Screen.ChatScreen, Icons.AutoMirrored.Outlined.Chat),
+    MoreItem(Screen.ProductScanner, Icons.Outlined.CameraAlt),
     MoreItem(Screen.Steps, Icons.AutoMirrored.Outlined.DirectionsWalk),
     MoreItem(Screen.SettingsScreen, Icons.Outlined.Settings),
 )

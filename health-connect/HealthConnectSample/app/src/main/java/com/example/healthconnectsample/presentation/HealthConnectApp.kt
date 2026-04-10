@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -75,7 +76,7 @@ fun HealthConnectApp(
             bottomBar = {
                 val bottomNavRoutes = listOf(
                     Screen.HomeScreen.route,
-                    Screen.ProductScanner.route,
+                    Screen.ChatScreen.route,
                     Screen.MealsScreen.route,
                     Screen.MoreScreen.route,
                 )
@@ -102,15 +103,15 @@ fun HealthConnectApp(
                             unselectedContentColor = unselectedColor,
                         )
                         BottomNavigationItem(
-                            selected = currentRoute == Screen.ProductScanner.route,
+                            selected = currentRoute == Screen.ChatScreen.route,
                             onClick = {
-                                navController.navigate(Screen.ProductScanner.route) {
+                                navController.navigate(Screen.ChatScreen.route) {
                                     popUpTo(Screen.HomeScreen.route)
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(Icons.Outlined.CameraAlt, contentDescription = "Scan Product") },
-                            label = { Text("Scan") },
+                            icon = { Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = "Chat") },
+                            label = { Text("Chat") },
                             selectedContentColor   = selectedColor,
                             unselectedContentColor = unselectedColor,
                         )
