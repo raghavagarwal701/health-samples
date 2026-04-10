@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.healthconnectsample.data.api.MealAnalysisPayloadResponse
 import com.example.healthconnectsample.data.api.ProductInfoResponse
 import com.example.healthconnectsample.data.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +42,7 @@ sealed class ScannerUiState {
 
     /** Meal analysed successfully – same result card as ProductFound. */
     data class MealFound(
-        val product: ProductInfoResponse,
+        val meal: MealAnalysisPayloadResponse,
         val askedQuestion: String? = null,
         val questionAnswer: String? = null,
         val mealImageBytes: ByteArray? = null,
@@ -52,7 +53,7 @@ sealed class ScannerUiState {
 
             other as MealFound
 
-            if (product != other.product) return false
+            if (meal != other.meal) return false
             if (askedQuestion != other.askedQuestion) return false
             if (questionAnswer != other.questionAnswer) return false
             if (mealImageBytes != null) {
@@ -64,7 +65,7 @@ sealed class ScannerUiState {
         }
 
         override fun hashCode(): Int {
-            var result = product.hashCode()
+            var result = meal.hashCode()
             result = 31 * result + (askedQuestion?.hashCode() ?: 0)
             result = 31 * result + (questionAnswer?.hashCode() ?: 0)
             result = 31 * result + (mealImageBytes?.contentHashCode() ?: 0)
@@ -187,9 +188,9 @@ class ProductScannerViewModel : ViewModel() {
                 val response = RetrofitClient.apiService.analyzeMeal(part, question = questionBody)
                 if (response.isSuccessful) {
                     val body = response.body()!!
-                    uiState.value = if (body.status == "analyzed" && body.product != null) {
+                    uiState.value = if (body.status == "analyzed" && body.meal != null) {
                         ScannerUiState.MealFound(
-                            product = body.product,
+                            meal = body.meal,
                             askedQuestion = body.askedQuestion,
                             questionAnswer = body.questionAnswer,
                             mealImageBytes = imageBytes,

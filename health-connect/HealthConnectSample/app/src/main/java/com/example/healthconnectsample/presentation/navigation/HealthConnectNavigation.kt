@@ -375,10 +375,12 @@ fun HealthConnectNavigation(
             )
         }
         composable(Screen.ChatScreen.route) {
+            val context = LocalContext.current
             val viewModel: ChatViewModel = viewModel(
                 factory = ChatViewModel.Factory(
                     healthConnectManager = healthConnectManager,
-                    profileRepository = profileRepository
+                    profileRepository = profileRepository,
+                    appContext = context.applicationContext,
                 )
             )
             ChatScreen(viewModel = viewModel)

@@ -176,11 +176,15 @@ fun MealsScreen(
             MealFatSecretAutocompleteResults(
                 query = state.query,
                 suggestions = state.suggestions,
+                recentSearches = state.recentSearches,
                 isLoading = state.isLoading,
                 errorMessage = state.errorMessage,
                 suppressAutoSearch = state.suppressAutoSearch,
                 onAutocomplete = { query -> viewModel.autocompleteFatSecretMeals(query) },
                 onSelectSuggestion = { suggestion -> viewModel.searchFatSecretMeals(suggestion) },
+                onSelectRecentSearch = { suggestion -> viewModel.searchFatSecretMeals(suggestion) },
+                onDeleteRecentSearch = { suggestion -> viewModel.removeFatSecretRecentSearch(suggestion) },
+                onUseAiForMeal = { typedQuery -> viewModel.openFatSecretAiMealInput(typedQuery) },
                 onClose = { viewModel.closeFatSecretSearch() }
             )
         }
@@ -212,16 +216,17 @@ fun MealsScreen(
                 onClose = { viewModel.backFromFatSecretFoodDetail() }
             )
         }
-        is MealCameraState.FatSecretMealPreview -> {
-            val state = cameraState as MealCameraState.FatSecretMealPreview
-            MealFatSecretMealPreview(
-                foodName = state.foodName,
-                servingDescription = state.servingDescription,
-                quantity = state.quantity,
-                totals = state.totals,
-                onConfirm = { viewModel.addFatSecretMeal(state) },
-                onRetry = { viewModel.showFatSecretSearch() },
-                onClose = { viewModel.closeFatSecretSearch() }
+        is MealCameraState.FatSecretAiMealInput -> {
+            val state = cameraState as MealCameraState.FatSecretAiMealInput
+            BackHandler {
+                viewModel.backFromFatSecretAiMealInput(state.mealText)
+            }
+            MealFatSecretAiMealInput(
+                initialQuery = state.mealText,
+                isLoading = state.isLoading,
+                errorMessage = state.errorMessage,
+                onAnalyze = { description -> viewModel.analyzeFatSecretAiMealText(description) },
+                onBack = { text -> viewModel.backFromFatSecretAiMealInput(text) }
             )
         }
     }
@@ -1351,30 +1356,6 @@ fun MealDetailDialog(entry: MealEntry, onClose: () -> Unit) {
                             servingSize = product.servingSize,
                         )
                     }
-
-                    // Description
-                    product.description?.let { desc ->
-                        Spacer(Modifier.height(12.dp))
-                        DescriptionCard(desc)
-                    }
-
-                    // Ingredients
-                    product.ingredients?.takeIf { it.isNotEmpty() }?.let { ingr ->
-                        Spacer(Modifier.height(12.dp))
-                        IngredientsCard(ingr)
-                    }
-
-                    // Insights
-                    product.insights?.let { insight ->
-                        Spacer(Modifier.height(12.dp))
-                        InsightsCard(insight)
-                    }
-
-                    // Items Breakdown
-                    product.items?.takeIf { it.isNotEmpty() }?.let { items ->
-                        Spacer(Modifier.height(12.dp))
-                        ItemsBreakdownCard(items)
-                    }
                 }
             }
         }
@@ -1405,69 +1386,32 @@ private fun NutritionFactsCard(
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.weight(1f))
-                if (!isMealAnalysis) {
-                    Text("per 100g", style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp), textAlign = TextAlign.End)
-                }
                 Text(totalLabel, style = MaterialTheme.typography.caption, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colors.primary, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Divider()
-            if (isMealAnalysis) {
-                MealNutrientRow("Energy", nutriments.energyKcalPkg, "kcal")
-                MealNutrientRow("Fat", nutriments.fatPkg, "g")
-                MealNutrientRow("Carbohydrates", nutriments.carbohydratesPkg, "g")
-                MealNutrientRow("  Sugars", nutriments.sugarsPkg, "g")
-                MealNutrientRow("Protein", nutriments.proteinsPkg, "g")
-                MealNutrientRow("Fiber", nutriments.fiberPkg, "g")
-                MealNutrientRow("Salt", nutriments.saltPkg, "g")
-            } else {
-                NutrientRow("Energy", nutriments.energyKcal100g, nutriments.energyKcalPkg, "kcal")
-                NutrientRow("Fat", nutriments.fat100g, nutriments.fatPkg, "g")
-                NutrientRow("Carbohydrates", nutriments.carbohydrates100g, nutriments.carbohydratesPkg, "g")
-                NutrientRow("  Sugars", nutriments.sugars100g, nutriments.sugarsPkg, "g")
-                NutrientRow("Protein", nutriments.proteins100g, nutriments.proteinsPkg, "g")
-                NutrientRow("Fiber", nutriments.fiber100g, nutriments.fiberPkg, "g")
-                NutrientRow("Salt", nutriments.salt100g, nutriments.saltPkg, "g")
-            }
+            NutrientRow("Energy", nutriments.energyKcalPkg, nutriments.energyKcal100g, "kcal")
+            NutrientRow("Fat", nutriments.fatPkg, nutriments.fat100g, "g")
+            NutrientRow("Carbohydrates", nutriments.carbohydratesPkg, nutriments.carbohydrates100g, "g")
+            NutrientRow("  Sugars", nutriments.sugarsPkg, nutriments.sugars100g, "g")
+            NutrientRow("Protein", nutriments.proteinsPkg, nutriments.proteins100g, "g")
+            NutrientRow("Fiber", nutriments.fiberPkg, nutriments.fiber100g, "g")
+            NutrientRow("Salt", nutriments.saltPkg, nutriments.salt100g, "g")
         }
     }
 }
 
 @Composable
-private fun MealNutrientRow(label: String, value: Double?, unit: String) {
-    if (value == null) return
+private fun NutrientRow(label: String, servingTotal: Double?, fallbackValue: Double?, unit: String) {
+    val displayValue = servingTotal ?: fallbackValue
+    if (displayValue == null) return
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
         Text(
-            text = "%.1f %s".format(value, unit),
-            style = MaterialTheme.typography.body2,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colors.primary,
-            modifier = Modifier.width(96.dp),
-            textAlign = TextAlign.End,
-        )
-    }
-}
-
-@Composable
-private fun NutrientRow(label: String, per100g: Double?, perPkg: Double?, unit: String) {
-    if (per100g == null && perPkg == null) return
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
-        Text(
-            text = if (per100g != null) "%.1f %s".format(per100g, unit) else "–",
-            style = MaterialTheme.typography.body2,
-            modifier = Modifier.width(72.dp),
-            textAlign = TextAlign.End
-        )
-        Text(
-            text = if (perPkg != null) "%.1f %s".format(perPkg, unit) else "–",
+            text = "%.1f %s".format(displayValue, unit),
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colors.primary,

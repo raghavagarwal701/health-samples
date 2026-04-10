@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import com.example.healthconnectsample.data.api.MealAnalysisPayloadResponse
 import com.example.healthconnectsample.data.api.ProductInfoResponse
 import com.example.healthconnectsample.data.api.ProductNutrimentsResponse
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -118,8 +120,8 @@ fun ProductScannerScreen(viewModel: ProductScannerViewModel) {
             label = "Scan Another Product",
             onDone = viewModel::resetToScanning
         )
-        is ScannerUiState.MealFound -> ProductDetailView(
-            product = state.product,
+        is ScannerUiState.MealFound -> MealDetailView(
+            meal = state.meal,
             askedQuestion = state.askedQuestion,
             questionAnswer = state.questionAnswer,
             mealImageBytes = state.mealImageBytes,
@@ -577,54 +579,6 @@ private fun ProductDetailView(
             )
         }
 
-        // Calorie Approximations
-        product.calorieApproximations?.let { approximations ->
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth(), backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Walking Approximation", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(approximations, style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
-                }
-            }
-        }
-
-        if (!product.pros.isNullOrEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                elevation = 2.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Ups", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    product.pros.forEach { pro ->
-                        Text("- $pro", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
-            }
-        }
-
-        if (!product.cons.isNullOrEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                elevation = 2.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Downs", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    product.cons.forEach { con ->
-                        Text("- $con", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
-            }
-        }
-
         // Ingredients (barcode only)
         product.ingredientsText?.let { ingredients ->
             Spacer(modifier = Modifier.height(16.dp))
@@ -635,6 +589,168 @@ private fun ProductDetailView(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        Button(
+            onClick = onDone,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
+        ) {
+            Icon(imageVector = Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun MealDetailView(
+    meal: MealAnalysisPayloadResponse,
+    askedQuestion: String? = null,
+    questionAnswer: String? = null,
+    mealImageBytes: ByteArray? = null,
+    label: String,
+    onDone: () -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    val nutrientRows = listOf(
+        "calories" to (meal.nutritionalValue.calories?.let { "${String.format("%.1f", it)} kcal" } ?: "-"),
+        "carbohydrate" to (meal.nutritionalValue.carbohydrate?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "protein" to (meal.nutritionalValue.protein?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "fat" to (meal.nutritionalValue.fat?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "saturated_fat" to (meal.nutritionalValue.saturatedFat?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "fiber" to (meal.nutritionalValue.fiber?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "sugar" to (meal.nutritionalValue.sugar?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "sodium" to (meal.nutritionalValue.sodium?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "potassium" to (meal.nutritionalValue.potassium?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "cholesterol" to (meal.nutritionalValue.cholesterol?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "vitamin_a" to (meal.nutritionalValue.vitaminA?.let { "${String.format("%.1f", it)}" } ?: "-"),
+        "vitamin_c" to (meal.nutritionalValue.vitaminC?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "calcium" to (meal.nutritionalValue.calcium?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "iron" to (meal.nutritionalValue.iron?.let { "${String.format("%.1f", it)} mg" } ?: "-"),
+        "trans_fat" to (meal.nutritionalValue.transFat?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "added_sugars" to (meal.nutritionalValue.addedSugars?.let { "${String.format("%.1f", it)} g" } ?: "-"),
+        "vitamin_d" to (meal.nutritionalValue.vitaminD?.let { "${String.format("%.1f", it)} mcg" } ?: "-"),
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        mealImageBytes?.let { bytes ->
+            val bitmap = remember(bytes) {
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+            bitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "Analyzed meal",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+
+        Text(
+            text = meal.nameOfMeal,
+            style = MaterialTheme.typography.h5,
+            fontWeight = FontWeight.Bold
+        )
+
+        meal.servingSize?.let { sz ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.06f)
+            ) {
+                Text(
+                    text = "Serving: $sz",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Nutritional Value", style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                nutrientRows.forEach { (key, value) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(key.replace("_", " "), style = MaterialTheme.typography.body2)
+                        Text(value, style = MaterialTheme.typography.body2, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            elevation = 2.dp,
+            modifier = Modifier.fillMaxWidth(),
+            backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Reasoning", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(meal.reasoning, style = MaterialTheme.typography.body2)
+            }
+        }
+
+        if (meal.webSourceLinks.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(shape = RoundedCornerShape(12.dp), elevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Web Sources", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    meal.webSourceLinks.forEach { link ->
+                        TextButton(
+                            onClick = { uriHandler.openUri(link) },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text(link, textAlign = TextAlign.Start)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!askedQuestion.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = 2.dp,
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.08f)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Your Question", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(askedQuestion, style = MaterialTheme.typography.body2, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Answer", style = MaterialTheme.typography.subtitle2, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(questionAnswer ?: "No answer was returned.", style = MaterialTheme.typography.body2)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onDone,
             modifier = Modifier.fillMaxWidth(),

@@ -67,11 +67,79 @@ data class ConversationMessagePayload(
     val content: String
 )
 
+data class MacroTotalsPayload(
+    @SerializedName("protein_g") val proteinG: Double? = null,
+    @SerializedName("carbs_g") val carbsG: Double? = null,
+    @SerializedName("fat_g") val fatG: Double? = null,
+)
+
+data class ChatMealEntryPayload(
+    val name: String,
+    val calories: Double? = null,
+    val macros: MacroTotalsPayload? = null,
+    val micronutrients: Map<String, Double>? = null,
+)
+
+data class TodayActivityContextPayload(
+    val steps: Long? = null,
+    @SerializedName("workout_minutes") val workoutMinutes: Double? = null,
+    @SerializedName("calories_burned") val caloriesBurned: Double? = null,
+)
+
+data class TodayChatContextPayload(
+    val meals: List<ChatMealEntryPayload> = emptyList(),
+    val calories: Double? = null,
+    val macros: MacroTotalsPayload? = null,
+    val activity: TodayActivityContextPayload? = null,
+)
+
+data class DailyNutrientTotalPayload(
+    val date: String? = null,
+    val calories: Double? = null,
+    val macros: MacroTotalsPayload? = null,
+    @SerializedName("meals_summary") val mealsSummary: String? = null,
+    val micronutrients: Map<String, Double>? = null,
+)
+
+data class LastFewDaysContextPayload(
+    @SerializedName("daily_totals") val dailyTotals: List<DailyNutrientTotalPayload> = emptyList(),
+)
+
+data class TrendSummaryPayload(
+    val calories: String? = null,
+    val protein: String? = null,
+    val carbs: String? = null,
+    val fat: String? = null,
+    val micronutrients: Map<String, String>? = null,
+)
+
+data class SevenDaySummaryContextPayload(
+    @SerializedName("avg_calories") val avgCalories: Double? = null,
+    @SerializedName("avg_macros") val avgMacros: MacroTotalsPayload? = null,
+    @SerializedName("micronutrient_averages") val micronutrientAverages: Map<String, Double>? = null,
+    val trends: TrendSummaryPayload? = null,
+)
+
+data class ChatUserProfilePayload(
+    @SerializedName("weight_kg") val weightKg: Double? = null,
+    @SerializedName("height_cm") val heightCm: Double? = null,
+    val goal: String? = null,
+    @SerializedName("activity_level") val activityLevel: String? = null,
+)
+
+data class ChatContextPayload(
+    val today: TodayChatContextPayload,
+    @SerializedName("last_3_4_days") val last34Days: LastFewDaysContextPayload,
+    @SerializedName("last_7_days_summary") val last7DaysSummary: SevenDaySummaryContextPayload,
+    @SerializedName("user_profile") val userProfile: ChatUserProfilePayload? = null,
+)
+
 // ===== API Request / Response =====
 
 data class ChatRequest(
     val query: String,
-    @SerializedName("health_data") val healthData: HealthDataPayload,
+    @SerializedName("chat_context") val chatContext: ChatContextPayload,
+    @SerializedName("health_data") val healthData: HealthDataPayload? = null,
     @SerializedName("conversation_history") val conversationHistory: List<ConversationMessagePayload> = emptyList()
 )
 
@@ -126,14 +194,6 @@ data class ProductInfoResponse(
     @SerializedName("product_quantity_unit") val productQuantityUnit: String? = null,
     @SerializedName("serving_size") val servingSize: String? = null,
     @SerializedName("serving_quantity") val servingQuantity: Double? = null,
-    // Meal-analysis-specific fields (null for barcode scans)
-    val description: String? = null,
-    val ingredients: List<String>? = null,
-    val insights: String? = null,
-    val pros: List<String>? = null,
-    val cons: List<String>? = null,
-    @SerializedName("calorie_approximations") val calorieApproximations: String? = null,
-    val items: List<MealItem>? = null,
 )
 
 data class ProductResponse(
@@ -143,7 +203,6 @@ data class ProductResponse(
 )
 
 // ===== Meal Analysis Models =====
-// Reuses ProductInfoResponse so the result card UI works for both barcode and meal flows.
 
 data class MealItemNutrients(
     val calories: Double? = null,
@@ -161,13 +220,58 @@ data class MealItem(
     val nutrients: MealItemNutrients,
 )
 
+data class MealNutritionalValueResponse(
+    val calories: Double? = null,
+    val carbohydrate: Double? = null,
+    val protein: Double? = null,
+    val fat: Double? = null,
+    @SerializedName("saturated_fat") val saturatedFat: Double? = null,
+    val fiber: Double? = null,
+    val sugar: Double? = null,
+    val sodium: Double? = null,
+    val potassium: Double? = null,
+    val cholesterol: Double? = null,
+    @SerializedName("vitamin_a") val vitaminA: Double? = null,
+    @SerializedName("vitamin_c") val vitaminC: Double? = null,
+    val calcium: Double? = null,
+    val iron: Double? = null,
+    @SerializedName("trans_fat") val transFat: Double? = null,
+    @SerializedName("added_sugars") val addedSugars: Double? = null,
+    @SerializedName("vitamin_d") val vitaminD: Double? = null,
+)
+
+data class MealAnalysisPayloadResponse(
+    val reasoning: String,
+    @SerializedName("web_source_links") val webSourceLinks: List<String> = emptyList(),
+    @SerializedName("name_of_meal") val nameOfMeal: String,
+    @SerializedName("serving_size") val servingSize: String? = null,
+    @SerializedName("nutritional_value") val nutritionalValue: MealNutritionalValueResponse,
+)
+
 data class MealAnalysisResponse(
-    val status: String,                       // "analyzed" | "error"
-    val product: ProductInfoResponse? = null, // dish name / portion / nutriments
+    val status: String,
+    val meal: MealAnalysisPayloadResponse? = null,
     @SerializedName("asked_question") val askedQuestion: String? = null,
     @SerializedName("question_answer") val questionAnswer: String? = null,
     val error: String? = null,
 )
+
+fun MealAnalysisPayloadResponse.toProductInfoResponse(barcode: String = "MEAL_PHOTO"): ProductInfoResponse {
+    val n = nutritionalValue
+    return ProductInfoResponse(
+        barcode = barcode,
+        productName = nameOfMeal,
+        servingSize = servingSize,
+        nutriments = ProductNutrimentsResponse(
+            energyKcalPkg = n.calories,
+            carbohydratesPkg = n.carbohydrate,
+            proteinsPkg = n.protein,
+            fatPkg = n.fat,
+            fiberPkg = n.fiber,
+            sugarsPkg = n.sugar,
+        ),
+    )
+}
 
 data class MealTextRequest(
     val description: String,                  // plain-text description of what the user ate

@@ -17,12 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.healthconnectsample.data.api.MealAnalysisPayloadResponse
 import com.example.healthconnectsample.data.api.ProductInfoResponse
 import com.example.healthconnectsample.data.api.ProductNutrimentsResponse
-import com.example.healthconnectsample.data.api.MealItem
-import com.example.healthconnectsample.data.api.MealItemNutrients
 import com.example.healthconnectsample.data.api.MealTextRequest
 import com.example.healthconnectsample.data.api.RetrofitClient
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +33,7 @@ import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // ─────────────────────────────────────────────
 // Data model
@@ -74,6 +75,7 @@ sealed class MealCameraState {
     data class FatSecretAutocompleteResults(
         val query: String,
         val suggestions: List<String>,
+        val recentSearches: List<String> = emptyList(),
         val isLoading: Boolean = false,
         val errorMessage: String? = null,
         val suppressAutoSearch: Boolean = false,
@@ -97,12 +99,12 @@ sealed class MealCameraState {
         val errorMessage: String? = null,
     ) : MealCameraState()
 
-    /** FatSecret meal preview – showing calculated totals before adding. */
-    data class FatSecretMealPreview(
-        val foodName: String,
-        val servingDescription: String,
-        val quantity: Double,
-        val totals: Map<String, Double>?,
+    /** FatSecret fallback text flow – lets AI analyze typed meal description. */
+    data class FatSecretAiMealInput(
+        val autocompleteQuery: String,
+        val mealText: String,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
     ) : MealCameraState()
 }
 
@@ -112,6 +114,20 @@ sealed class MealCameraState {
 
 private const val PREFS_NAME = "pulse_meal_log"
 private const val PREFS_KEY  = "meal_log_v2"
+private const val FATSECRET_CACHE_PREFS = "pulse_fatsecret_cache"
+private const val FATSECRET_CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000
+private const val FATSECRET_RECENT_SEARCHES_KEY = "fatsecret_recent_searches"
+private const val FATSECRET_RECENT_SEARCHES_LIMIT = 8
+
+private data class FatSecretAutocompleteCacheEntry(
+    val suggestions: List<String>,
+    val savedAtMs: Long,
+)
+
+private data class FatSecretCacheEnvelope(
+    val savedAtMs: Long,
+    val payloadJson: String,
+)
 
 // ─────────────────────────────────────────────
 // ViewModel
@@ -120,11 +136,15 @@ private const val PREFS_KEY  = "meal_log_v2"
 class MealsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val fatSecretCachePrefs = application.getSharedPreferences(FATSECRET_CACHE_PREFS, Context.MODE_PRIVATE)
+    private val gson = Gson()
     private var fatSecretAutocompleteToken: Long = 0L
     private var fatSecretSearchToken: Long = 0L
     private var fatSecretFoodDetailToken: Long = 0L
+    private var fatSecretAiAnalyzeToken: Long = 0L
     private var lastFatSecretTypedQuery: String = ""
-    private val fatSecretAutocompleteCache = mutableMapOf<String, Pair<List<String>, String?>>()
+    private val fatSecretAutocompleteCache = mutableMapOf<String, FatSecretAutocompleteCacheEntry>()
+    private val fatSecretRecentSearches = loadFatSecretRecentSearches().toMutableList()
     private var lastFatSecretSearchResults: MealCameraState.FatSecretSearchResults? = null
 
     // ── Date ──────────────────────────────────
@@ -137,6 +157,109 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadFromPrefs()
+    }
+
+    private fun isFatSecretCacheFresh(savedAtMs: Long): Boolean {
+        return System.currentTimeMillis() - savedAtMs <= FATSECRET_CACHE_TTL_MS
+    }
+
+    private fun fatSecretCacheKey(prefix: String, value: String): String {
+        val normalized = value.trim().lowercase(Locale.US)
+        return "$prefix:$normalized"
+    }
+
+    private fun saveFatSecretCache(cacheKey: String, payload: Any) {
+        try {
+            val envelope = FatSecretCacheEnvelope(
+                savedAtMs = System.currentTimeMillis(),
+                payloadJson = gson.toJson(payload),
+            )
+            fatSecretCachePrefs.edit().putString(cacheKey, gson.toJson(envelope)).apply()
+        } catch (e: Exception) {
+            android.util.Log.e("MealsVM", "saveFatSecretCache failed", e)
+        }
+    }
+
+    private inline fun <reified T> loadFatSecretCache(cacheKey: String): T? {
+        val raw = fatSecretCachePrefs.getString(cacheKey, null) ?: return null
+        val envelope = runCatching { gson.fromJson(raw, FatSecretCacheEnvelope::class.java) }.getOrNull() ?: return null
+        if (!isFatSecretCacheFresh(envelope.savedAtMs)) {
+            fatSecretCachePrefs.edit().remove(cacheKey).apply()
+            return null
+        }
+        return runCatching { gson.fromJson(envelope.payloadJson, T::class.java) }.getOrNull()
+    }
+
+    private fun loadFreshAutocompleteEntry(query: String): FatSecretAutocompleteCacheEntry? {
+        val cacheKey = fatSecretCacheKey("autocomplete", query)
+        val inMemory = fatSecretAutocompleteCache[cacheKey]
+        if (inMemory != null) {
+            if (isFatSecretCacheFresh(inMemory.savedAtMs)) {
+                return inMemory
+            }
+            fatSecretAutocompleteCache.remove(cacheKey)
+        }
+
+        val persisted = loadFatSecretCache<FatSecretAutocompleteCacheEntry>(cacheKey)
+        if (persisted != null) {
+            fatSecretAutocompleteCache[cacheKey] = persisted
+        }
+        return persisted
+    }
+
+    private fun saveAutocompleteEntry(query: String, suggestions: List<String>) {
+        val cacheKey = fatSecretCacheKey("autocomplete", query)
+        val entry = FatSecretAutocompleteCacheEntry(
+            suggestions = suggestions,
+            savedAtMs = System.currentTimeMillis(),
+        )
+        fatSecretAutocompleteCache[cacheKey] = entry
+        saveFatSecretCache(cacheKey, entry)
+    }
+
+    private fun loadFatSecretRecentSearches(): List<String> {
+        val raw = fatSecretCachePrefs.getString(FATSECRET_RECENT_SEARCHES_KEY, null) ?: return emptyList()
+        return try {
+            val array = org.json.JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val value = array.optString(i).trim()
+                    if (value.isNotBlank()) add(value)
+                }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveFatSecretRecentSearches() {
+        val array = org.json.JSONArray()
+        fatSecretRecentSearches.forEach { array.put(it) }
+        fatSecretCachePrefs.edit().putString(FATSECRET_RECENT_SEARCHES_KEY, array.toString()).apply()
+    }
+
+    private fun recentSearchesSnapshot(): List<String> = fatSecretRecentSearches.toList()
+
+    private fun addFatSecretRecentSearch(query: String) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return
+        fatSecretRecentSearches.removeAll { it.equals(normalized, ignoreCase = true) }
+        fatSecretRecentSearches.add(0, normalized)
+        if (fatSecretRecentSearches.size > FATSECRET_RECENT_SEARCHES_LIMIT) {
+            fatSecretRecentSearches.subList(FATSECRET_RECENT_SEARCHES_LIMIT, fatSecretRecentSearches.size).clear()
+        }
+        saveFatSecretRecentSearches()
+    }
+
+    fun removeFatSecretRecentSearch(query: String) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return
+        val removed = fatSecretRecentSearches.removeAll { it.equals(normalized, ignoreCase = true) }
+        if (!removed) return
+        saveFatSecretRecentSearches()
+
+        val state = cameraState.value as? MealCameraState.FatSecretAutocompleteResults ?: return
+        cameraState.value = state.copy(recentSearches = recentSearchesSnapshot())
     }
 
     /** Returns the entries for the currently selected date. */
@@ -261,8 +384,8 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.apiService.analyzeMeal(part, notePart)
                 if (response.isSuccessful) {
                     val body = response.body()!!
-                    if (body.status == "analyzed" && body.product != null) {
-                        addMeal(selectedDate.value, body.product, imageUri)
+                    if (body.status == "analyzed" && body.meal != null) {
+                        addMeal(selectedDate.value, mealToProductInfo(body.meal), imageUri)
                         cameraState.value = MealCameraState.LogView
                     } else {
                         cameraState.value =
@@ -289,8 +412,8 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 if (response.isSuccessful) {
                     val body = response.body()!!
-                    if (body.status == "analyzed" && body.product != null) {
-                        addMeal(selectedDate.value, body.product, null)
+                    if (body.status == "analyzed" && body.meal != null) {
+                        addMeal(selectedDate.value, mealToProductInfo(body.meal), null)
                         cameraState.value = MealCameraState.LogView
                     } else {
                         cameraState.value =
@@ -313,6 +436,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
         cameraState.value = MealCameraState.FatSecretAutocompleteResults(
             query = "",
             suggestions = emptyList(),
+            recentSearches = recentSearchesSnapshot(),
             isLoading = false,
             errorMessage = null,
             suppressAutoSearch = false
@@ -327,6 +451,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
             cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                 query = trimmedQuery,
                 suggestions = emptyList(),
+                recentSearches = recentSearchesSnapshot(),
                 isLoading = false,
                 errorMessage = null,
                 suppressAutoSearch = false
@@ -334,13 +459,14 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val cachedResult = fatSecretAutocompleteCache[trimmedQuery]
+        val cachedResult = loadFreshAutocompleteEntry(trimmedQuery)
         if (cachedResult != null) {
             cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                 query = trimmedQuery,
-                suggestions = cachedResult.first,
+                suggestions = cachedResult.suggestions,
+                recentSearches = recentSearchesSnapshot(),
                 isLoading = false,
-                errorMessage = cachedResult.second,
+                errorMessage = null,
                 suppressAutoSearch = false
             )
             return
@@ -351,6 +477,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
         cameraState.value = MealCameraState.FatSecretAutocompleteResults(
             query = trimmedQuery,
             suggestions = currentState?.suggestions ?: emptyList(),
+            recentSearches = recentSearchesSnapshot(),
             isLoading = true,
             errorMessage = null,
             suppressAutoSearch = false
@@ -370,10 +497,11 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                     val body = response.body()!!
                     if (body.status == "success") {
                         if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
-                        fatSecretAutocompleteCache[trimmedQuery] = body.suggestions to null
+                        saveAutocompleteEntry(trimmedQuery, body.suggestions)
                         cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                             query = trimmedQuery,
                             suggestions = body.suggestions,
+                            recentSearches = recentSearchesSnapshot(),
                             isLoading = false,
                             errorMessage = null,
                             suppressAutoSearch = false
@@ -381,10 +509,10 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
                         val error = body.error ?: "No suggestions found"
-                        fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
                         cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                             query = trimmedQuery,
                             suggestions = emptyList(),
+                            recentSearches = recentSearchesSnapshot(),
                             isLoading = false,
                             errorMessage = error,
                             suppressAutoSearch = false
@@ -393,10 +521,10 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
                     val error = "Server error: ${response.code()}"
-                    fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
                     cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                         query = trimmedQuery,
                         suggestions = emptyList(),
+                        recentSearches = recentSearchesSnapshot(),
                         isLoading = false,
                         errorMessage = error,
                         suppressAutoSearch = false
@@ -406,10 +534,10 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 if (requestToken != fatSecretAutocompleteToken) return@launch
                 if ((cameraState.value as? MealCameraState.FatSecretAutocompleteResults)?.query != trimmedQuery) return@launch
                 val error = e.localizedMessage ?: "Connection error"
-                fatSecretAutocompleteCache[trimmedQuery] = emptyList<String>() to error
                 cameraState.value = MealCameraState.FatSecretAutocompleteResults(
                     query = trimmedQuery,
                     suggestions = emptyList(),
+                    recentSearches = recentSearchesSnapshot(),
                     isLoading = false,
                     errorMessage = error,
                     suppressAutoSearch = false
@@ -420,6 +548,9 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun searchFatSecretMeals(query: String) {
         val trimmedQuery = query.trim()
+        if (trimmedQuery.isNotBlank()) {
+            addFatSecretRecentSearch(trimmedQuery)
+        }
         val currentState = cameraState.value as? MealCameraState.FatSecretSearchResults
         val autocompleteQuery = when (val state = cameraState.value) {
             is MealCameraState.FatSecretAutocompleteResults -> state.query
@@ -435,6 +566,22 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 isLoading = false,
                 errorMessage = null
             )
+            return
+        }
+
+        val cachedSearch = loadFatSecretCache<com.example.healthconnectsample.data.api.FatSecretSearchResponse>(
+            fatSecretCacheKey("search", trimmedQuery)
+        )
+        if (cachedSearch?.status == "success") {
+            val newState = MealCameraState.FatSecretSearchResults(
+                query = trimmedQuery,
+                autocompleteQuery = autocompleteQuery,
+                foods = cachedSearch.results,
+                isLoading = false,
+                errorMessage = null
+            )
+            lastFatSecretSearchResults = newState
+            cameraState.value = newState
             return
         }
 
@@ -455,6 +602,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful) {
                     val body = response.body()!!
                     if (body.status == "success") {
+                        saveFatSecretCache(fatSecretCacheKey("search", trimmedQuery), body)
                         val newState = MealCameraState.FatSecretSearchResults(
                             query = trimmedQuery,
                             autocompleteQuery = autocompleteQuery,
@@ -505,19 +653,109 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
         fatSecretAutocompleteToken++
         val requestedQuery = query.trim()
         val targetQuery = if (requestedQuery.isNotBlank()) requestedQuery else lastFatSecretTypedQuery
-        val cachedResult = fatSecretAutocompleteCache[targetQuery]
+        val cachedResult = loadFreshAutocompleteEntry(targetQuery)
 
         cameraState.value = MealCameraState.FatSecretAutocompleteResults(
             query = targetQuery,
-            suggestions = cachedResult?.first ?: emptyList(),
+            suggestions = cachedResult?.suggestions ?: emptyList(),
+            recentSearches = recentSearchesSnapshot(),
             isLoading = false,
-            errorMessage = cachedResult?.second,
+            errorMessage = null,
             suppressAutoSearch = true
         )
     }
 
+    fun openFatSecretAiMealInput(query: String) {
+        val normalized = query.trim().ifBlank { lastFatSecretTypedQuery }
+        if (normalized.isNotBlank()) {
+            lastFatSecretTypedQuery = normalized
+        }
+        cameraState.value = MealCameraState.FatSecretAiMealInput(
+            autocompleteQuery = normalized,
+            mealText = normalized,
+            isLoading = false,
+            errorMessage = null
+        )
+    }
+
+    fun backFromFatSecretAiMealInput(currentText: String) {
+        backToFatSecretAutocomplete(currentText)
+    }
+
+    fun analyzeFatSecretAiMealText(description: String) {
+        val currentState = cameraState.value as? MealCameraState.FatSecretAiMealInput ?: return
+        val normalizedDescription = description.trim()
+        if (normalizedDescription.isBlank()) {
+            cameraState.value = currentState.copy(
+                mealText = description,
+                isLoading = false,
+                errorMessage = "Please enter a meal description"
+            )
+            return
+        }
+
+        val requestToken = ++fatSecretAiAnalyzeToken
+        cameraState.value = currentState.copy(
+            mealText = description,
+            isLoading = true,
+            errorMessage = null
+        )
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.analyzeMealFromText(
+                    MealTextRequest(description = normalizedDescription)
+                )
+                if (requestToken != fatSecretAiAnalyzeToken) return@launch
+
+                if (response.isSuccessful) {
+                    val body = response.body()!!
+                    if (body.status == "analyzed" && body.meal != null) {
+                        addMeal(selectedDate.value, mealToProductInfo(body.meal), null)
+                        cameraState.value = MealCameraState.LogView
+                    } else {
+                        cameraState.value = MealCameraState.FatSecretAiMealInput(
+                            autocompleteQuery = currentState.autocompleteQuery,
+                            mealText = description,
+                            isLoading = false,
+                            errorMessage = body.error ?: "Analysis returned no data"
+                        )
+                    }
+                } else {
+                    cameraState.value = MealCameraState.FatSecretAiMealInput(
+                        autocompleteQuery = currentState.autocompleteQuery,
+                        mealText = description,
+                        isLoading = false,
+                        errorMessage = "Server error: ${response.code()}"
+                    )
+                }
+            } catch (e: Exception) {
+                if (requestToken != fatSecretAiAnalyzeToken) return@launch
+                cameraState.value = MealCameraState.FatSecretAiMealInput(
+                    autocompleteQuery = currentState.autocompleteQuery,
+                    mealText = description,
+                    isLoading = false,
+                    errorMessage = e.localizedMessage ?: "Connection error"
+                )
+            }
+        }
+    }
+
     fun selectFatSecretFood(food: com.example.healthconnectsample.data.api.FatSecretFood) {
         lastFatSecretSearchResults = cameraState.value as? MealCameraState.FatSecretSearchResults
+        val cacheKey = fatSecretCacheKey("food", food.foodId.toString())
+        val cachedFood = loadFatSecretCache<com.example.healthconnectsample.data.api.FatSecretFoodResponse>(cacheKey)
+        if (cachedFood?.status == "success" && cachedFood.food != null) {
+            cameraState.value = MealCameraState.FatSecretFoodDetail(
+                food = cachedFood.food,
+                selectedServingIndex = defaultServingIndex(cachedFood.food),
+                quantity = 1.0,
+                isLoading = false,
+                errorMessage = null
+            )
+            return
+        }
+
         val requestToken = ++fatSecretFoodDetailToken
         cameraState.value = MealCameraState.FatSecretFoodDetail(
             food = food,
@@ -536,6 +774,7 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                     val body = response.body()
                     val detailedFood = body?.food
                     if (body?.status == "success" && detailedFood != null) {
+                        saveFatSecretCache(cacheKey, body)
                         cameraState.value = MealCameraState.FatSecretFoodDetail(
                             food = detailedFood,
                             selectedServingIndex = defaultServingIndex(detailedFood),
@@ -594,66 +833,62 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        cameraState.value = MealCameraState.Analyzing
-        viewModelScope.launch {
-            try {
-                val request = com.example.healthconnectsample.data.api.FatSecretMealAddRequest(
-                    foodId = currentState.food.foodId,
-                    servingDescription = selectedServing.servingDescription,
-                    quantity = currentState.quantity
-                )
-                val response = RetrofitClient.apiService.previewFatSecretMeal(request)
-                if (response.isSuccessful) {
-                    val body = response.body()!!
-                    if (body.status == "success") {
-                        cameraState.value = MealCameraState.FatSecretMealPreview(
-                            foodName = body.foodName ?: currentState.food.foodName,
-                            servingDescription = body.servingDescription ?: "1 serving",
-                            quantity = body.quantity ?: currentState.quantity,
-                            totals = body.totals
-                        )
-                    } else {
-                        cameraState.value = MealCameraState.CameraError(
-                            body.error ?: "Could not calculate meal nutrition"
-                        )
-                    }
-                } else {
-                    cameraState.value = MealCameraState.CameraError("Server error: ${response.code()}")
-                }
-            } catch (e: Exception) {
-                cameraState.value =
-                    MealCameraState.CameraError(e.localizedMessage ?: "Connection error")
-            }
-        }
-    }
-
-    fun addFatSecretMeal(preview: MealCameraState.FatSecretMealPreview) {
-        // Convert FatSecret meal to ProductInfoResponse format for consistent storage
-        val product = ProductInfoResponse(
-            barcode = "fatsecret_${System.currentTimeMillis()}",
-            productName = preview.foodName,
-            brands = null,
-            categories = null,
-            nutriscoreGrade = null,
-            nutriments = preview.totals?.let { totals ->
-                ProductNutrimentsResponse(
-                    energyKcal100g = totals["calories"],
-                    carbohydrates100g = totals["carbohydrate"],
-                    proteins100g = totals["protein"],
-                    fat100g = totals["fat"],
-                    fiber100g = totals["fiber"],
-                    salt100g = totals["sodium"]?.let { it / 1000 }, // Convert mg to g
-                    sugars100g = totals["sugar"]
-                )
-            },
-            description = "Serving: ${preview.servingDescription} (x${preview.quantity})"
+        val product = buildFatSecretMealProduct(
+            food = currentState.food,
+            serving = selectedServing,
+            quantity = currentState.quantity
         )
         addMeal(selectedDate.value, product, null)
         cameraState.value = MealCameraState.LogView
     }
 
+    private fun buildFatSecretMealProduct(
+        food: com.example.healthconnectsample.data.api.FatSecretFood,
+        serving: com.example.healthconnectsample.data.api.FatSecretServing,
+        quantity: Double,
+    ): ProductInfoResponse {
+        val safeQuantity = quantity.coerceAtLeast(0.1)
+        val scale: (Double?) -> Double? = { value -> value?.times(safeQuantity) }
+        val servingLabel = serving.servingDescription.trim().ifEmpty { "1 serving" }
+        val barcodeSuffix = serving.servingId?.toString() ?: "serving"
+        val caloriesTotal = scale(serving.calories)
+        val carbsTotal = scale(serving.carbohydrate)
+        val proteinTotal = scale(serving.protein)
+        val fatTotal = scale(serving.fat)
+        val fiberTotal = scale(serving.fiber)
+        val sugarTotal = scale(serving.sugar)
+        val sodiumTotalMg = scale(serving.sodium)
+        val saltTotalG = sodiumTotalMg?.let { (it / 1000.0) * 2.5 }
+
+        return ProductInfoResponse(
+            barcode = "fatsecret_${food.foodId}_${barcodeSuffix}_${System.currentTimeMillis()}",
+            productName = food.foodName,
+            brands = food.brandName,
+            categories = food.foodType,
+            servingSize = "$servingLabel (x$safeQuantity)",
+            nutriscoreGrade = null,
+            nutriments = ProductNutrimentsResponse(
+                energyKcal100g = caloriesTotal,
+                fat100g = fatTotal,
+                carbohydrates100g = carbsTotal,
+                sugars100g = sugarTotal,
+                proteins100g = proteinTotal,
+                fiber100g = fiberTotal,
+                salt100g = saltTotalG,
+                energyKcalPkg = caloriesTotal,
+                fatPkg = fatTotal,
+                carbohydratesPkg = carbsTotal,
+                sugarsPkg = sugarTotal,
+                proteinsPkg = proteinTotal,
+                fiberPkg = fiberTotal,
+                saltPkg = saltTotalG
+            )
+        )
+    }
+
     fun closeFatSecretSearch() {
         fatSecretFoodDetailToken++
+        fatSecretAiAnalyzeToken++
         cameraState.value = MealCameraState.LogView
     }
 
@@ -684,6 +919,41 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
         existing[date] = list
         _mealLog.value = existing
         saveToPrefs()
+    }
+
+    private fun mealToProductInfo(meal: MealAnalysisPayloadResponse): ProductInfoResponse {
+        val n = meal.nutritionalValue
+        val calories = n.calories
+        val fat = n.fat
+        val carbs = n.carbohydrate
+        val sugar = n.sugar
+        val protein = n.protein
+        val fiber = n.fiber
+        val salt = n.sodium?.let { (it / 1000.0) * 2.5 }
+
+        return ProductInfoResponse(
+            barcode = "meal_ai_${System.currentTimeMillis()}",
+            productName = meal.nameOfMeal,
+            brands = "AI Meal Analysis",
+            categories = "Meal",
+            servingSize = meal.servingSize,
+            nutriments = ProductNutrimentsResponse(
+                energyKcal100g = calories,
+                fat100g = fat,
+                carbohydrates100g = carbs,
+                sugars100g = sugar,
+                proteins100g = protein,
+                fiber100g = fiber,
+                salt100g = salt,
+                energyKcalPkg = calories,
+                fatPkg = fat,
+                carbohydratesPkg = carbs,
+                sugarsPkg = sugar,
+                proteinsPkg = protein,
+                fiberPkg = fiber,
+                saltPkg = salt
+            )
+        )
     }
 
     fun removeMeal(date: LocalDate, index: Int) {
@@ -718,30 +988,6 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                         put("product_quantity", p.productQuantity ?: org.json.JSONObject.NULL)
                         put("product_quantity_unit", p.productQuantityUnit ?: "")
                         put("serving_quantity", p.servingQuantity ?: org.json.JSONObject.NULL)
-                        put("description", p.description ?: "")
-                        put("insights", p.insights ?: "")
-                        p.ingredients?.let { ingr ->
-                            put("ingredients", org.json.JSONArray(ingr))
-                        }
-                        p.items?.let { itemList ->
-                            val itemsArr = org.json.JSONArray()
-                            itemList.forEach { item ->
-                                itemsArr.put(org.json.JSONObject().apply {
-                                    put("name", item.name)
-                                    put("estimated_quantity", item.estimatedQuantity)
-                                    put("nutrients", org.json.JSONObject().apply {
-                                        put("calories", item.nutrients.calories ?: org.json.JSONObject.NULL)
-                                        put("protein", item.nutrients.protein ?: org.json.JSONObject.NULL)
-                                        put("carbohydrates", item.nutrients.carbohydrates ?: org.json.JSONObject.NULL)
-                                        put("fat", item.nutrients.fat ?: org.json.JSONObject.NULL)
-                                        put("sugar", item.nutrients.sugar ?: org.json.JSONObject.NULL)
-                                        put("fiber", item.nutrients.fiber ?: org.json.JSONObject.NULL)
-                                        put("sodium", item.nutrients.sodium ?: org.json.JSONObject.NULL)
-                                    })
-                                })
-                            }
-                            put("items", itemsArr)
-                        }
                         p.nutriments?.let { n ->
                             put("nutriments", org.json.JSONObject().apply {
                                 put("energy_kcal_100g", n.energyKcal100g ?: org.json.JSONObject.NULL)
@@ -824,31 +1070,6 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
                         productQuantityUnit  = e.optString("product_quantity_unit").ifEmpty { null },
                         servingQuantity      = e.optDouble("serving_quantity").takeUnless { it.isNaN() },
                         nutriments           = nutriments,
-                        description          = e.optString("description").ifEmpty { null },
-                        insights             = e.optString("insights").ifEmpty { null },
-                        ingredients          = e.optJSONArray("ingredients")?.let { arr ->
-                            (0 until arr.length()).map { arr.getString(it) }
-                        },
-                        items                = e.optJSONArray("items")?.let { arr ->
-                            (0 until arr.length()).map { idx ->
-                                val itemObj = arr.getJSONObject(idx)
-                                val nObj = itemObj.optJSONObject("nutrients")
-                                fun nd(key: String) = nObj?.optDouble(key)?.takeUnless { it.isNaN() }
-                                MealItem(
-                                    name = itemObj.optString("name"),
-                                    estimatedQuantity = itemObj.optString("estimated_quantity"),
-                                    nutrients = MealItemNutrients(
-                                        calories = nd("calories"),
-                                        protein = nd("protein"),
-                                        carbohydrates = nd("carbohydrates"),
-                                        fat = nd("fat"),
-                                        sugar = nd("sugar"),
-                                        fiber = nd("fiber"),
-                                        sodium = nd("sodium"),
-                                    )
-                                )
-                            }
-                        },
                     )
                     entries.add(MealEntry(product = product, timestamp = timestamp, imageUri = imageUri))
                 }
@@ -864,16 +1085,24 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
     // ── Computed totals for a date ─────────────
 
     fun totalKcal(date: LocalDate): Double =
-        entriesForDate(date).sumOf { it.product.nutriments?.energyKcalPkg ?: 0.0 }
+        entriesForDate(date).sumOf {
+            it.product.nutriments?.energyKcalPkg ?: it.product.nutriments?.energyKcal100g ?: 0.0
+        }
 
     fun totalProtein(date: LocalDate): Double =
-        entriesForDate(date).sumOf { it.product.nutriments?.proteinsPkg ?: 0.0 }
+        entriesForDate(date).sumOf {
+            it.product.nutriments?.proteinsPkg ?: it.product.nutriments?.proteins100g ?: 0.0
+        }
 
     fun totalCarbs(date: LocalDate): Double =
-        entriesForDate(date).sumOf { it.product.nutriments?.carbohydratesPkg ?: 0.0 }
+        entriesForDate(date).sumOf {
+            it.product.nutriments?.carbohydratesPkg ?: it.product.nutriments?.carbohydrates100g ?: 0.0
+        }
 
     fun totalFat(date: LocalDate): Double =
-        entriesForDate(date).sumOf { it.product.nutriments?.fatPkg ?: 0.0 }
+        entriesForDate(date).sumOf {
+            it.product.nutriments?.fatPkg ?: it.product.nutriments?.fat100g ?: 0.0
+        }
 
     // ── Factory ───────────────────────────────
 
