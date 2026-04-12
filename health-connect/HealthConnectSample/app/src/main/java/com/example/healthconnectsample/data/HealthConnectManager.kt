@@ -652,7 +652,7 @@ class HealthConnectManager(private val context: Context) {
                 sleepSessions.mapNotNull { it.duration?.toMinutes() }.average()
             } else 0.0
 
-            SleepSummaryPayload(
+            SleepSummaryForLlmPayload(
                 sleepSessions = sessionsData,
                 sleepQuality = mapOf(
                     "average_duration_minutes" to avgDurationMinutes,
